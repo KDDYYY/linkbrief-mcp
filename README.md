@@ -18,6 +18,43 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 - **PDF, 여러 링크, JavaScript 페이지까지** 한 도구로 처리합니다.
 - **API 키가 필요 없습니다.** 요약은 사용 중인 Claude가 합니다.
 
+## 빠른 시작 (Claude Code 기준, 3단계)
+
+**1. 설치** — 터미널에서 한 줄. npm에서 자동으로 받아 실행하므로 `npm install`을 따로 할 필요가 없습니다.
+
+```bash
+claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
+```
+
+**2. 연결 확인** — Claude Code를 다시 열고 대화창에 `/mcp`를 입력하면 연결된 MCP 서버 목록이 나옵니다. `linkbrief`가 연결됨으로 보이고 도구 `fetch_page`, `fetch_pages`가 있으면 준비 끝입니다. (터미널에서는 `claude mcp list`)
+
+**3. 그냥 부탁하기** — 명령어를 외울 필요가 없습니다. 링크와 함께 평소처럼 말하면 Claude가 알아서 linkbrief를 불러 씁니다.
+
+> 이 글 3줄로 요약해 줘: https://blog.naver.com/아이디/글번호
+
+Claude Desktop, Codex, Cursor 설정은 아래 [설치](#설치)를 보세요.
+
+### 어떻게 동작하나요?
+
+linkbrief는 **에이전트가 쓰는 도구**입니다. 무엇을 언제 읽을지는 Claude(에이전트)가 대화를 보고 스스로 정합니다.
+
+```
+사용자: "이 두 기사 비교해 줘: 링크1 링크2"
+   │
+   ▼
+Claude(에이전트) ── 링크가 여러 개네 → fetch_pages 호출
+   │                    글이 길어서 잘렸네 → fetch_page로 이어 읽기
+   ▼
+linkbrief (내 PC에서 실행) ── 페이지·PDF를 받아 본문만 Markdown으로 정리
+   │
+   ▼
+Claude가 읽고 비교·요약해서 답변
+```
+
+- 링크가 하나면 `fetch_page`, 여러 개면 `fetch_pages`를 Claude가 골라 씁니다.
+- 글이 길면 결과 끝의 안내를 보고 Claude가 **스스로 다음 부분을 이어서** 읽습니다.
+- 처음 쓸 때 Claude가 도구 사용 허락을 물으면 허용하세요. 매번 묻지 않게 하려면 허락 창에서 "항상 허용"을 고르면 됩니다.
+
 ## 토큰 절감 효과
 
 블로그·뉴스·위키 등 실제 국내외 페이지를 원본 HTML 그대로 넘길 때와 linkbrief 결과를 비교했습니다 (글자 수 기준, 2026-11-26 측정).
@@ -83,7 +120,7 @@ claude mcp add linkbrief -s user -- node "$(pwd)/server.mjs"
 
 Windows PowerShell에서는 마지막 줄을 `claude mcp add linkbrief -s user -- node "$PWD\server.mjs"` 로 바꾸세요.
 
-**설치 확인** — `claude mcp list`에 `linkbrief: ... ✔ Connected`가 보이면 준비된 것입니다. 설치·설정을 바꾼 뒤에는 Claude를 **다시 시작**해야 적용됩니다.
+**설치 확인** — Claude Code 대화창의 `/mcp` 또는 터미널의 `claude mcp list`에서 `linkbrief`가 연결됨(`✔ Connected`)으로 보이면 준비된 것입니다. 설치·설정을 바꾼 뒤에는 Claude를 **다시 시작**해야 적용됩니다.
 
 ## 사용 방법
 
@@ -272,6 +309,8 @@ MIT
 **linkbrief-mcp** is an MCP server that lets Claude (or Codex, Cursor, any MCP client) read web pages and PDFs **from your own computer**, returning only the main content as Markdown with a title/source/author/date line. It is tuned for Korean sites (Naver Blog's iframe layout, Naver/Daum News, Tistory, Brunch, Velog, Daum Cafe) and legacy charsets (EUC-KR, Shift_JIS, EUC-JP, GBK, Big5, TIS-620, windows-1258), and works for pages in any language.
 
 **Token savings:** on real blog, news and wiki pages, linkbrief output is **about 95% smaller** than the raw HTML (92–99% per page). Link URLs are stripped by default (49–66% less on link-heavy pages), long pages are paged, and pages are cached for 10 minutes.
+
+**Quick start (Claude Code):** run `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp` (npx fetches it from npm; no separate install), reopen Claude Code and type `/mcp` to see `linkbrief` connected with the `fetch_page` and `fetch_pages` tools, then just ask with a link. linkbrief is a tool the agent uses: Claude decides when to call it, picks `fetch_pages` for several links, and reads long pages in parts on its own.
 
 **Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp`
 **Claude Desktop:** add `"linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }` under `mcpServers`.
