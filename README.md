@@ -97,7 +97,7 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 
 > https://fr.wikipedia.org/wiki/Kimchi 핵심만 5줄로 한국어 정리해 줘
 
-**PDF** — 논문, 보도자료, 보고서 링크도 그대로 주면 됩니다. 페이지 번호(`## Page 3`)가 붙어 나와서 "몇 쪽에 나오는지"도 물어볼 수 있습니다.
+**PDF** — 논문, 보도자료, 보고서 링크도 그대로 주면 됩니다. 자세한 방법은 아래 [PDF 읽기](#pdf-읽기)를 보세요.
 
 > 이 논문 핵심 기여 3가지와 실험 결과만 정리해 줘: https://arxiv.org/pdf/1706.03762
 
@@ -122,6 +122,31 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 **링크 주소가 필요할 때** — 기본값은 링크 글자만 남겨 분량을 줄입니다. 출처 주소까지 필요하면:
 
 > 이 페이지의 참고 링크 주소까지 포함해서 정리해 줘 (include_links 켜고): https://...
+
+### PDF 읽기
+
+**1. PDF 주소를 구합니다.** 웹페이지의 PDF 링크·다운로드 버튼에서 오른쪽 클릭 → **링크 주소 복사**, 또는 브라우저에 PDF가 열려 있으면 **주소창**을 복사합니다.
+
+![PDF 링크를 복사해 Claude에 붙여 넣는 3단계](docs/images/pdf-link.png)
+
+**2. Claude에 주소와 함께 부탁합니다.** linkbrief가 PDF를 받아 페이지별로 글자를 뽑고, Claude가 정리합니다.
+
+![arXiv 논문 PDF를 linkbrief로 읽어 한국어 4줄로 요약하는 과정](docs/images/pdf-demo.gif)
+
+<sub>예시: `fetch_page` 결과는 실제 linkbrief 출력(저자 이메일이 나오는 줄 앞에서 생략)이고, 요약은 Claude가 그 결과로 작성한 것입니다.</sub>
+
+알아 두면 좋은 점:
+
+| 상황 | 동작 |
+|---|---|
+| 주소가 `.pdf`로 끝나지 않음 (`download.do?id=…` 등) | 서버가 PDF를 보내 주면 자동으로 PDF로 읽습니다 |
+| 결과에 `## Page 3` 같은 쪽 표시 | "몇 쪽에 나오는지", "3쪽만 요약해 줘"처럼 물어볼 수 있습니다 |
+| 긴 PDF | 2만 자씩 나눠 읽습니다. "끝까지 읽고 요약해 줘"라고 하면 Claude가 이어서 읽습니다 |
+| 결과 맨 위 `PDF, 15 pages` 줄 | 쪽수와 PDF에 적힌 제목·작성자·작성일이 함께 붙습니다 |
+| **내 컴퓨터에 있는 PDF 파일** | linkbrief는 인터넷 주소만 읽습니다. Claude 대화창에 **파일을 직접 첨부**하세요 |
+| 로그인해야 받을 수 있는 PDF, 버튼을 눌러야 받아지는 PDF | 주소만으로 받을 수 없어 읽지 못합니다. 내려받아 직접 첨부하세요 |
+| 스캔한 이미지 PDF | 글자가 없어 읽지 못합니다 (`PDF has no extractable text`) |
+| 30MB가 넘는 PDF | 읽지 않습니다 |
 
 ### JavaScript로 그려지는 페이지
 
@@ -253,6 +278,8 @@ MIT
 **Codex:** add `[mcp_servers.linkbrief]` with `command = "npx"` and `args = ["-y", "linkbrief-mcp"]` to `~/.codex/config.toml`.
 
 **Tools:** `fetch_page` — `url`, `max_length` (20000), `start_index`, `include_links` (false), `render` (false). `fetch_pages` — up to 10 `urls`, `max_length_per_page` (8000), `include_links`.
+
+**PDFs:** pass the PDF's web address (right-click the link → copy link address, or copy the address bar of an open PDF). Text comes back per page (`## Page N`) with title, author, date and page count; URLs that don't end in `.pdf` work when the server sends a PDF. Local files, login-only or button-triggered downloads and scanned PDFs are not supported — attach those to Claude directly.
 
 **JavaScript pages:** when a plain request comes back empty or blocked (403/429/503), linkbrief retries in the Chrome or Edge already installed (via the optional `puppeteer-core`; no browser download), with a fresh profile and the same private-address checks on every request. Disable with `LINKBRIEF_BROWSER=off`. Bot checks such as Cloudflare are reported, never bypassed.
 
