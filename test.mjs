@@ -50,6 +50,9 @@ assert.ok(!extract('<body><p><a href="/home"><svg><title>home</title></svg></a> 
   const stripped = extract(wiki, { links: false }).markdown;
   assert.match(stripped, /^Kimchi\\\[1\\\] see Kimchi \(disambiguation\) and 韓國\./, stripped);
   assert.ok(!stripped.includes("]("), stripped);
+  // Literal brackets in prose before a footnote link (seen on fr.wikipedia) must survive
+  const prose = '<body><article><p>le peuple Goguryeo [renvoyant au peuple coréen] est doué dans le livre des Wei<a href="#cite_note-15">[15]</a>. ' + "texte ".repeat(60) + "</p></article></body>";
+  assert.match(extract(prose, { links: false }).markdown, /^le peuple Goguryeo \\\[renvoyant au peuple coréen\\\] est doué dans le livre des Wei\\\[15\\\]\./);
 }
 
 // Extraction: no article -> whole body fallback

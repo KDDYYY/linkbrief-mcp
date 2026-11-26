@@ -43,7 +43,8 @@ turndown.addRule("table", {
 });
 
 // "[text](url "title")" -> "text". Handles escaped brackets and one level of parentheses in URLs.
-const MD_LINK = /\[((?:\\.|[^\]\\])*)\]\((?:\\.|[^()\\]|\([^)]*\))*\)/g;
+// A link never starts at an escaped "\[" (literal bracket in the prose), and its text has no bare "[".
+const MD_LINK = /(?<!\\)\[((?:\\.|[^[\]\\])*)\]\((?:\\.|[^()\\]|\([^)]*\))*\)/g;
 
 // Main content via Readability; falls back to the whole <body> when it finds no article.
 // links: false keeps only link text; URLs often outweigh the prose (percent-encoded wiki links).
