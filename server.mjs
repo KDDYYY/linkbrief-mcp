@@ -7,6 +7,9 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { fetchText, paginate } from "./page.mjs";
 
+// stdout carries the MCP protocol; a library warning printed there (pdf.js does) would corrupt it.
+console.log = console.info = console.debug = console.error;
+
 const { version } = createRequire(import.meta.url)("./package.json");
 const server = new McpServer({ name: "linkbrief", version });
 

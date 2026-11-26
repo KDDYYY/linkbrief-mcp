@@ -44,11 +44,11 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 | **링크 주소 제거** (기본값) | 링크 글자만 남김. 위키백과 기준 49~66% 추가 감소. 필요하면 `include_links`로 유지 |
 | **나눠 읽기** | 한 번에 2만 자까지만 넘기고, 더 필요할 때만 `start_index`로 이어 읽음 |
 | **여러 링크는 페이지당 상한** | `fetch_pages`는 기본 페이지당 8천 자 |
-| **10분 캐시** | 같은 페이지를 이어 읽을 때 다시 내려받지 않음 (두 번째 요청 0ms) |
+| **10분 캐시** | 같은 페이지를 이어 읽을 때 다시 내려받지 않음 (두 번째 요청이 1천 분의 몇 초 만에 끝남) |
 
 ## 설치
 
-Node.js 20 이상이 필요합니다.
+Node.js 22.12 이상이 필요합니다 (Node 20은 2026년 4월 지원 종료).
 
 **Claude Code**
 
@@ -145,12 +145,12 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 |---|---|
 | Claude가 도구를 안 쓰고 "링크를 열 수 없다"고 함 | Claude를 다시 시작했는지, `claude mcp list`에 `✔ Connected`인지 확인. "linkbrief로 읽어 줘"라고 직접 말해도 됩니다 |
 | `Page text too short` | 로그인이 필요한 페이지이거나, JavaScript 페이지인데 Chrome·Edge가 없는 경우입니다 |
-| `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium) |
+| `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium, Stack Overflow, npm 웹사이트) |
 | `Refusing to fetch a private or local address` | `localhost`·사내망 주소는 보안상 막혀 있습니다 |
 | `PDF has no extractable text` | 스캔 이미지로 된 PDF입니다 (글자 인식 OCR은 지원 안 함) |
 | `Could not reach ...` / 시간 초과 | 사이트가 느리거나 막혔습니다. 잠시 후 다시 시도하세요 (자동으로 1회 재시도합니다) |
 | `Google search result pages block automated access` | Google 검색 결과 대신 결과 글의 주소를 직접 주세요 |
-| 설치 시 `npx` 오류 | Node.js 20 이상인지 확인: `node --version` |
+| 설치 시 `npx` 오류, `EBADENGINE` 경고 | Node.js 22.12 이상인지 확인: `node --version` |
 
 ## 도구
 
@@ -191,7 +191,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 | JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
 | EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
 | 네이버 카페 | ⏳ 준비 중 (대부분 회원 전용) |
-| Medium 등 봇 확인(Cloudflare)을 거는 사이트 | ❌ 우회하지 않습니다 |
+| Medium, Stack Overflow 등 봇 확인(Cloudflare)을 거는 사이트 | ❌ 우회하지 않습니다 |
 | Google 검색 결과 페이지 | ❌ Google이 자동 접근을 막습니다. Claude의 웹 검색을 쓰세요 |
 | YouTube 자막, 로그인이 필요한 글, 스캔 PDF, 이미지·동영상 | ❌ |
 
@@ -262,6 +262,6 @@ MIT
 
 **Safety:** refuses localhost, private/link-local networks and cloud metadata addresses (re-checked on every redirect and browser request), reads at most 5 MB per page and 30 MB per PDF, and accepts HTML/text/PDF only.
 
-**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium), YouTube transcripts, pages behind a login, scanned PDFs.
+**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow), YouTube transcripts, pages behind a login, scanned PDFs.
 
 Development: `npm test` (offline), `npm run check:live` (real sites). Site-specific rules live in `sites.mjs`. License: MIT.

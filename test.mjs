@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall } from "./page.mjs";
+import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText } from "./page.mjs";
 import { findBrowser, renderPage } from "./browser.mjs";
 import { normalizeUrl } from "./sites.mjs";
 
@@ -101,6 +101,18 @@ assert.ok(!extract('<body><p><a href="/home"><svg><title>home</title></svg></a> 
 assert.ok(isBotWall('<html><head><title>Just a moment...</title></head><body><script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script></body></html>'));
 assert.ok(isBotWall("<html><head><title>잠시만 기다리십시오…</title></head></html>"));
 assert.ok(!isBotWall(fixture("article-with-nav.html")));
+// Cloudflare injects challenge-platform scripts into normal pages too (seen on discord.com)
+assert.ok(!isBotWall(fixture("article-with-nav.html").replace("</body>", '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body>')));
+
+// fetchText always returns a promise, even when the URL is refused or invalid, and failures are not cached
+{
+  const refused = fetchText("https://www.google.com/search?q=x");
+  assert.ok(refused instanceof Promise);
+  await assert.rejects(refused, /block automated access/);
+  await assert.rejects(fetchText("not a url"), /Invalid URL/);
+  await assert.rejects(fetchText("http://127.0.0.1/", { render: true }), /private or local/);
+  assert.notEqual(fetchText("https://www.google.com/search?q=x").catch(() => {}), refused, "failed fetch must not be cached");
+}
 
 // Browser discovery honours LINKBRIEF_BROWSER
 {
@@ -126,6 +138,11 @@ if (findBrowser() && await import("puppeteer-core").then(() => true, () => false
   if (r) {
     assert.match(r.html, /rendered by script\. rendered by script\./);
     assert.match(r.html, /<title>blocked<\/title>/, "private request from the page must be aborted");
+    // Concurrent renders are queued and both complete
+    const simple = (n) => `data:text/html,${encodeURIComponent(`<p>page ${n}</p>`)}`;
+    const both = await Promise.all([renderPage(simple(1), assertPublicUrl), renderPage(simple(2), assertPublicUrl)]);
+    assert.match(both[0].html, /page 1/);
+    assert.match(both[1].html, /page 2/);
   } else console.log("(skipped browser test: browser could not launch here)");
 } else console.log("(skipped browser test: no Chrome/Edge or puppeteer-core)");
 

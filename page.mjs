@@ -191,7 +191,7 @@ export async function pdfToMarkdown(bytes) {
   return { title: info.Title || "", byline: author, published: info.CreationDate || "", pages: totalPages, markdown };
 }
 
-const isPdf = (type, url) => /^application\/pdf\b/i.test(type) || (/^application\/octet-stream\b/i.test(type) && /\.pdf$/i.test(new URL(url).pathname));
+const isPdf = (type, url) => /^application\/(x-)?pdf\b/i.test(type) || (/^(application|binary)\/octet-stream\b/i.test(type) && /\.pdf$/i.test(new URL(url).pathname));
 
 // Pages are cached briefly so reading a long page in parts (start_index) does not refetch it.
 const CACHE_MS = 10 * 60 * 1000;
@@ -204,7 +204,9 @@ export function fetchText(raw, { links = true, render = false } = {}) {
   const key = `${links}|${render}|${raw}`;
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
-  const promise = render ? fetchRendered(normalizeUrl(raw), links) : fetchUncached(raw, { links });
+  // Always a promise: normalizeUrl can throw (bad URL, refused site) and fetch_pages relies on rejections.
+  const promise = Promise.resolve().then(() => (render ? fetchRendered(normalizeUrl(raw), links) : fetchUncached(raw, { links })));
+  cache.delete(key); // re-insert so an expired entry moves to the newest end for eviction
   cache.set(key, { at: Date.now(), promise });
   promise.catch(() => cache.delete(key)); // never cache failures
   if (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value);
@@ -212,8 +214,9 @@ export function fetchText(raw, { links = true, render = false } = {}) {
 }
 
 // Bot-check interstitials (Cloudflare etc.) are reported, never solved or bypassed.
+// Not "cdn-cgi/challenge-platform" alone: Cloudflare also injects that script into normal pages (discord.com).
 export function isBotWall(html) {
-  return /cdn-cgi\/challenge-platform|window\._cf_chl_opt|<title>\s*(just a moment|잠시만 기다리십시오|attention required)/i.test(html);
+  return /window\._cf_chl_opt|<title>\s*(just a moment|잠시만 기다리십시오|attention required)/i.test(html);
 }
 const botWallError = (url) => new Error(`This site shows a bot check (e.g. Cloudflare) instead of the page; linkbrief does not bypass it: ${url}`);
 

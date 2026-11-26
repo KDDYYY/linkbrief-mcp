@@ -30,8 +30,16 @@ export function findBrowser() {
 
 // Renders url and returns the final HTML. Every request the page makes goes through checkUrl
 // (the same private-address guard as plain fetches); images, media and fonts are skipped.
+// Renders run one at a time, so fetch_pages with many JS pages never opens ten browsers at once.
 // shortcut: launches a fresh browser per call (~1-2 s); keep one alive if rendering becomes frequent.
-export async function renderPage(url, checkUrl) {
+let queue = Promise.resolve();
+export function renderPage(url, checkUrl) {
+  const run = queue.then(() => renderNow(url, checkUrl));
+  queue = run.catch(() => {});
+  return run;
+}
+
+async function renderNow(url, checkUrl) {
   const executablePath = findBrowser();
   if (!executablePath) throw new Error("No Chrome or Edge found for JavaScript rendering (set LINKBRIEF_BROWSER to its path).");
   let puppeteer;
@@ -60,6 +68,7 @@ export async function renderPage(url, checkUrl) {
     return { url: page.url(), status: response?.status() ?? 200, html: await page.content() };
   } finally {
     await browser.close().catch(() => {});
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    // Windows can keep profile files locked for a moment after close; leftovers in tmp are harmless.
+    try { fs.rmSync(userDataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); } catch { /* ignore */ }
   }
 }
