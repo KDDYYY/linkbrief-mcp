@@ -20,18 +20,12 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 
 ## 토큰 절감 효과
 
-같은 페이지를 원본 HTML 그대로 넘길 때와 linkbrief 결과를 비교했습니다 (글자 수, 2026-11-26 측정).
+블로그·뉴스·위키 등 실제 국내외 페이지를 원본 HTML 그대로 넘길 때와 linkbrief 결과를 비교했습니다 (글자 수 기준, 2026-11-26 측정).
 
-| 페이지 | 원본 HTML | linkbrief 결과 | 절감 |
-|---|---:|---:|---:|
-| 네이버 블로그 글 | 251,003 | 12,245 | 95.1% |
-| 네이버 뉴스 기사 | 266,257 | 575 | 99.8% |
-| 다음 뉴스 기사 | 88,449 | 3,794 | 95.7% |
-| 티스토리 글 | 42,582 | 1,770 | 95.8% |
-| 영어 위키백과 「Kimchi」 | 777,908 | 64,506 | 91.7% |
-| 중국어 위키백과 「韩国泡菜」 | 223,904 | 7,610 | 96.6% |
-| BBC News | 368,018 | 1,768 | 99.5% |
-| **합계** | **2,018,121** | **92,268** | **95.4%** |
+| | 원본 HTML | linkbrief 결과 |
+|---|---:|---:|
+| 분량 | 약 202만 자 | 약 9만 자 |
+| **절감** | | **약 95% (페이지별 92~99%)** |
 
 토큰 수는 글자 수에 대체로 비례하므로, 같은 내용을 읽는 데 드는 토큰도 이 정도 줄어듭니다. 토큰이 줄면 **사용량 한도가 덜 차고, 응답이 빨라지고, 긴 대화에서도 앞 내용을 덜 잊습니다.**
 
@@ -39,9 +33,9 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 
 | 방법 | 효과 |
 |---|---|
-| **본문만 추출** (Mozilla Readability) | 메뉴·광고·댓글·푸터·스크립트 제거 — 위 표의 대부분 |
-| **이미지·아이콘 제거** | 네이버 블로그는 이미지 주소만으로 분량이 2배가 됩니다 |
-| **링크 주소 제거** (기본값) | 링크 글자만 남김. 위키백과 기준 49~66% 추가 감소. 필요하면 `include_links`로 유지 |
+| **본문만 추출** (Mozilla Readability) | 메뉴·광고·댓글·푸터·스크립트 제거 — 절감의 대부분 |
+| **이미지·아이콘 제거** | 이미지 주소만으로 분량이 2배가 되는 페이지도 있습니다 |
+| **링크 주소 제거** (기본값) | 링크 글자만 남김. 링크가 많은 문서에서 49~66% 추가 감소. 필요하면 `include_links`로 유지 |
 | **나눠 읽기** | 한 번에 2만 자까지만 넘기고, 더 필요할 때만 `start_index`로 이어 읽음 |
 | **여러 링크는 페이지당 상한** | `fetch_pages`는 기본 페이지당 8천 자 |
 | **10분 캐시** | 같은 페이지를 이어 읽을 때 다시 내려받지 않음 (두 번째 요청이 1천 분의 몇 초 만에 끝남) |
@@ -252,7 +246,7 @@ MIT
 
 **linkbrief-mcp** is an MCP server that lets Claude (or Codex, Cursor, any MCP client) read web pages and PDFs **from your own computer**, returning only the main content as Markdown with a title/source/author/date line. It is tuned for Korean sites (Naver Blog's iframe layout, Naver/Daum News, Tistory, Brunch, Velog, Daum Cafe) and legacy charsets (EUC-KR, Shift_JIS, EUC-JP, GBK, Big5, TIS-620, windows-1258), and works for pages in any language.
 
-**Token savings:** across 7 real pages, raw HTML totalled 2,018,121 characters versus 92,268 from linkbrief — **95.4% less**. Link URLs are stripped by default (49–66% less on Wikipedia), long pages are paged, and pages are cached for 10 minutes.
+**Token savings:** on real blog, news and wiki pages, linkbrief output is **about 95% smaller** than the raw HTML (92–99% per page). Link URLs are stripped by default (49–66% less on link-heavy pages), long pages are paged, and pages are cached for 10 minutes.
 
 **Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp`
 **Claude Desktop:** add `"linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }` under `mcpServers`.
