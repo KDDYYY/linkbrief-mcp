@@ -5,19 +5,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { fileURLToPath } from "node:url";
 
 const DEFAULT_URLS = [
-  // Korean portals and blogs
-  "https://blog.naver.com/brandmite/224450419315",
+  // Korean portals and blogs (official or operator accounts, not private individuals)
+  "https://blog.naver.com/naverofficial/224491681766",
   "https://n.news.naver.com/article/022/0004178338",
   "https://v.daum.net/v/20261126154125458",
   "https://notice.tistory.com/2709",
   "https://brunch.co.kr/",
-  "https://velog.io/@kim9708/React설치",
-  "https://m.cafe.daum.net/recpark/N7n4/1417",
+  "https://velog.io/@velopert/veltrends-dev-review",
   // PDFs
   "https://arxiv.org/pdf/1706.03762",
   "https://www.kcue.or.kr/_upload/high/2026/03/27/application_642e302e6e463874a6d1db2a6734851d.pdf",
   // Bot check: expected to fail with a clear message
-  "https://medium.com/@karpathy/software-2-0-a64152b37c35",
+  "https://medium.com/",
   // Google
   "https://blog.google/",
   "https://www.google.com/search?q=kimchi",

@@ -7,9 +7,9 @@ import { normalizeUrl, naverCafeIds, sites } from "./sites.mjs";
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
 // Site adapters: Naver URL forms
-const m = "https://m.blog.naver.com/PostView.naver?blogId=brandmite&logNo=224450419315";
-assert.equal(normalizeUrl("https://blog.naver.com/PostView.naver?blogId=brandmite&logNo=224450419315"), m);
-assert.equal(normalizeUrl("https://blog.naver.com/brandmite/224450419315"), m);
+const m = "https://m.blog.naver.com/PostView.naver?blogId=exampleuser&logNo=223000000001";
+assert.equal(normalizeUrl("https://blog.naver.com/PostView.naver?blogId=exampleuser&logNo=223000000001"), m);
+assert.equal(normalizeUrl("https://blog.naver.com/exampleuser/223000000001"), m);
 assert.equal(normalizeUrl("https://example.com/a?b=1"), "https://example.com/a?b=1");
 assert.throws(() => normalizeUrl("https://www.google.com/search?q=kimchi"), /block automated access/);
 assert.throws(() => normalizeUrl("https://www.google.co.kr/search?q=x"), /block automated access/);
@@ -18,12 +18,12 @@ assert.equal(normalizeUrl("https://blog.google/"), "https://blog.google/");
 // Naver Cafe: ids from each URL form, API response -> page, login-only posts explained
 {
   const ids = (s) => naverCafeIds(new URL(s));
-  assert.deepEqual(ids("https://cafe.naver.com/ArticleRead.nhn?clubid=31225230&articleid=5187&referrerAllArticles=true"), { club: "31225230", article: "5187" });
-  assert.deepEqual(ids("https://m.cafe.naver.com/ca-fe/web/cafes/31225230/articles/5187"), { club: "31225230", article: "5187" });
-  assert.deepEqual(ids("https://cafe.naver.com/ca-fe/cafes/31225230/articles/5187?boardtype=L"), { club: "31225230", article: "5187" });
-  assert.equal(ids("https://cafe.naver.com/somecafe/5187"), null);
+  assert.deepEqual(ids("https://cafe.naver.com/ArticleRead.nhn?clubid=12345678&articleid=42&referrerAllArticles=true"), { club: "12345678", article: "42" });
+  assert.deepEqual(ids("https://m.cafe.naver.com/ca-fe/web/cafes/12345678/articles/42"), { club: "12345678", article: "42" });
+  assert.deepEqual(ids("https://cafe.naver.com/ca-fe/cafes/12345678/articles/42?boardtype=L"), { club: "12345678", article: "42" });
+  assert.equal(ids("https://cafe.naver.com/somecafe/42"), null);
   const cafe = sites.find((s) => s.name === "naver-cafe");
-  assert.throws(() => cafe.api(new URL("https://cafe.naver.com/somecafe/5187")), /clubid and articleid/);
+  assert.throws(() => cafe.api(new URL("https://cafe.naver.com/somecafe/42")), /clubid and articleid/);
   const ok = cafe.fromApi({ result: { cafe: { name: "테스트카페" }, article: { subject: "공개 글", writer: { nick: "카페회원" }, writeDate: Date.UTC(2026, 10, 1), contentHtml: "<p>본문</p>" } } });
   assert.deepEqual(ok, { html: "<p>본문</p>", title: "공개 글", byline: "카페회원", siteName: "네이버 카페 | 테스트카페", published: "2026-11-01T00:00:00.000Z" });
   // Shape seen live for a login-only post (2026-11-26)

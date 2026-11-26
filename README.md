@@ -267,7 +267,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 
 실제 사이트 점검 결과 (`npm run check:live`, 2026-11-26) — Medium(봇 확인)과 Google 검색은 의도적으로 거절합니다:
 
-![국내외 24개 사이트 점검 결과](docs/images/live.png)
+![국내외 23개 사이트 점검 결과](docs/images/live.png)
 
 ## 보안
 
