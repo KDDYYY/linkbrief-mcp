@@ -1,6 +1,6 @@
-# summer-mcp
+# linkbrief-mcp
 
-Claude가 **내 PC에서 직접** 웹 페이지를 읽게 해 주는 MCP 서버입니다. 링크를 주고 "요약해 줘"라고 하면, summer가 본문을 Markdown으로 가져오고 Claude가 정리합니다.
+Claude가 **내 PC에서 직접** 웹 페이지를 읽게 해 주는 MCP 서버입니다. 링크를 주고 "요약해 줘"라고 하면, linkbrief가 본문을 Markdown으로 가져오고 Claude가 정리합니다.
 
 한국 사이트에 맞춰 만들었습니다: 네이버 블로그(iframe 구조), 다음·네이버 뉴스, 티스토리, 브런치, 그리고 EUC-KR 같은 옛 인코딩. 영어·불어·중국어·일본어·태국어·베트남어 페이지도 깨지지 않고 읽습니다.
 
@@ -8,8 +8,8 @@ Claude가 **내 PC에서 직접** 웹 페이지를 읽게 해 주는 MCP 서버�
 
 ## 왜 필요한가요?
 
-- Claude의 기본 웹 가져오기는 일부 사이트(예: `blog.naver.com`)가 막혀 있습니다. summer는 **사용자 PC에서 일반 브라우저처럼** 요청하므로 이런 제한을 받지 않습니다.
-- 네이버 블로그는 본문이 iframe 안에 있어 그냥 가져오면 비어 있습니다. summer는 본문이 들어 있는 모바일 주소로 바꿔 읽습니다.
+- Claude의 기본 웹 가져오기는 일부 사이트(예: `blog.naver.com`)가 막혀 있습니다. linkbrief는 **사용자 PC에서 일반 브라우저처럼** 요청하므로 이런 제한을 받지 않습니다.
+- 네이버 블로그는 본문이 iframe 안에 있어 그냥 가져오면 비어 있습니다. linkbrief는 본문이 들어 있는 모바일 주소로 바꿔 읽습니다.
 - 메뉴·광고·이미지 주소를 걷어내고 본문만 Markdown으로 넘겨 토큰을 아낍니다(위키백과 기준 약 50~65% 감소).
 - API 키가 필요 없습니다. 요약은 사용 중인 Claude가 합니다.
 
@@ -20,7 +20,7 @@ Node.js 20 이상이 필요합니다.
 **Claude Code**
 
 ```bash
-claude mcp add summer -s user -- npx -y summer-mcp
+claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
 **Claude Desktop** — `claude_desktop_config.json`에 추가 (설정 → 개발자 → 설정 편집):
@@ -28,12 +28,12 @@ claude mcp add summer -s user -- npx -y summer-mcp
 ```json
 {
   "mcpServers": {
-    "summer": { "command": "npx", "args": ["-y", "summer-mcp"] }
+    "linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }
   }
 }
 ```
 
-**Cursor 등 다른 MCP 클라이언트** — 명령 `npx -y summer-mcp`를 stdio 서버로 등록하면 됩니다.
+**Cursor 등 다른 MCP 클라이언트** — 명령 `npx -y linkbrief-mcp`를 stdio 서버로 등록하면 됩니다.
 
 설치 후 Claude를 다시 시작하고 이렇게 말해 보세요:
 
@@ -68,7 +68,7 @@ claude mcp add summer -s user -- npx -y summer-mcp
 
 ## 주의
 
-summer는 사용자 본인 PC에서 사용자를 대신해 페이지를 읽는 도구입니다. 각 사이트의 이용약관과 robots.txt, 저작권은 사용자가 지켜야 합니다. 가져온 글을 재배포하지 마세요.
+linkbrief는 사용자 본인 PC에서 사용자를 대신해 페이지를 읽는 도구입니다. 각 사이트의 이용약관과 robots.txt, 저작권은 사용자가 지켜야 합니다. 가져온 글을 재배포하지 마세요.
 
 ## 개발
 
@@ -110,10 +110,10 @@ MIT
 
 ## English
 
-**summer-mcp** is an MCP server that lets Claude read web pages **from your own computer** and returns the main content as Markdown, so Claude can summarize it. It is tuned for Korean sites (Naver Blog's iframe layout, Daum/Naver News, Tistory, Brunch) and legacy charsets (EUC-KR, Shift_JIS, EUC-JP, GBK, Big5, TIS-620, windows-1258), and works for pages in any language.
+**linkbrief-mcp** is an MCP server that lets Claude read web pages **from your own computer** and returns the main content as Markdown, so Claude can summarize it. It is tuned for Korean sites (Naver Blog's iframe layout, Daum/Naver News, Tistory, Brunch) and legacy charsets (EUC-KR, Shift_JIS, EUC-JP, GBK, Big5, TIS-620, windows-1258), and works for pages in any language.
 
-**Install (Claude Code):** `claude mcp add summer -s user -- npx -y summer-mcp`
-**Claude Desktop:** add `"summer": { "command": "npx", "args": ["-y", "summer-mcp"] }` under `mcpServers`.
+**Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp`
+**Claude Desktop:** add `"linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }` under `mcpServers`.
 
 **Tool `fetch_page`:** `url` (required), `max_length` (default 20000), `start_index` (for reading the next part of long pages), `include_links` (default `false`: keep link text only).
 

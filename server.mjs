@@ -8,7 +8,7 @@ import { z } from "zod";
 import { fetchText, paginate } from "./page.mjs";
 
 const { version } = createRequire(import.meta.url)("./package.json");
-const server = new McpServer({ name: "summer", version });
+const server = new McpServer({ name: "linkbrief", version });
 
 server.registerTool(
   "fetch_page",
