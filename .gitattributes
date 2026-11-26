@@ -1,0 +1,2 @@
+# Keep LF so the server.mjs shebang works on macOS/Linux even when published from Windows.
+* text=auto eol=lf

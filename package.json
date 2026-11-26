@@ -1,0 +1,40 @@
+{
+  "name": "summer-mcp",
+  "version": "0.1.0",
+  "description": "MCP server that lets Claude read web pages from your own PC — tuned for Korean sites (Naver blog, Daum, Tistory, Brunch) and legacy charsets (EUC-KR, Shift_JIS, GBK).",
+  "type": "module",
+  "bin": {
+    "summer-mcp": "server.mjs"
+  },
+  "files": [
+    "server.mjs",
+    "page.mjs",
+    "sites.mjs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test.mjs",
+    "check:live": "node scripts/live-check.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "claude",
+    "fetch",
+    "readability",
+    "markdown",
+    "naver",
+    "korean"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "@mozilla/readability": "^0.6.0",
+    "linkedom": "^0.18.15",
+    "turndown": "^7.2.5",
+    "zod": "^4.6.7"
+  }
+}
