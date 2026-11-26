@@ -11,6 +11,13 @@ const DEFAULT_URLS = [
   "https://v.daum.net/v/20261126154125458",
   "https://notice.tistory.com/2709",
   "https://brunch.co.kr/",
+  "https://velog.io/@kim9708/React설치",
+  "https://m.cafe.daum.net/recpark/N7n4/1417",
+  // PDFs
+  "https://arxiv.org/pdf/1706.03762",
+  "https://www.kcue.or.kr/_upload/high/2026/03/27/application_642e302e6e463874a6d1db2a6734851d.pdf",
+  // Bot check: expected to fail with a clear message
+  "https://medium.com/@karpathy/software-2-0-a64152b37c35",
   // Google
   "https://blog.google/",
   "https://www.google.com/search?q=kimchi",
@@ -47,11 +54,19 @@ for (const url of urls) {
     console.log(`FAIL ${url} (${secs}s)\n     ${text}`);
     continue;
   }
-  const body = text.replace(/^URL: .*\n\n/, "");
+  const body = text;
   const scripts = Object.entries(SCRIPTS).map(([k, re]) => [k, (body.match(re) || []).length]).filter(([, n]) => n > 50).map(([k]) => k);
   const broken = (body.match(/�/g) || []).length;
   console.log(`${broken ? "WARN" : "OK  "} ${url} (${secs}s) ${body.length} chars, scripts: ${scripts.join("+") || "-"}${broken ? `, ${broken} broken chars` : ""}`);
   console.log(`     ${body.slice(0, 160).replace(/\s+/g, " ")}`);
+}
+if (!process.argv.slice(2).length) {
+  // fetch_pages: several links in one call, one of them failing
+  const multi = ["https://notice.tistory.com/2709", "https://en.wikipedia.org/wiki/Kimchi", "https://www.google.com/search?q=x"];
+  const r = await client.callTool({ name: "fetch_pages", arguments: { urls: multi, max_length_per_page: 2000 } });
+  const sections = r.content[0].text.split(/^=== Page \d+ of \d+ ===$/m).filter(Boolean);
+  const ok = sections.filter((s) => !s.includes("[Failed:")).length;
+  console.log(`\n${ok === 2 && !r.isError ? "OK  " : "FAIL"} fetch_pages: ${sections.length} sections, ${ok} fetched, ${sections.length - ok} failed as expected`);
 }
 await client.close();
 console.log(`\n${urls.length - failed}/${urls.length} fetched`);

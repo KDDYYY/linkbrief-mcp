@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody } from "./page.mjs";
+import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall } from "./page.mjs";
+import { findBrowser, renderPage } from "./browser.mjs";
 import { normalizeUrl } from "./sites.mjs";
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
@@ -54,6 +55,79 @@ assert.ok(!extract('<body><p><a href="/home"><svg><title>home</title></svg></a> 
   const prose = '<body><article><p>le peuple Goguryeo [renvoyant au peuple coréen] est doué dans le livre des Wei<a href="#cite_note-15">[15]</a>. ' + "texte ".repeat(60) + "</p></article></body>";
   assert.match(extract(prose, { links: false }).markdown, /^le peuple Goguryeo \\\[renvoyant au peuple coréen\\\] est doué dans le livre des Wei\\\[15\\\]\./);
 }
+
+// Metadata: Naver nickname, og:site_name, published time -> one source line under the title
+{
+  const page = extract(fixture("naver-blog.html"));
+  assert.equal(page.byline, "테스터");
+  assert.equal(page.siteName, "네이버 블로그");
+  const article = extract(fixture("article-with-nav.html"));
+  assert.equal(article.byline, "테스트 기자");
+  assert.equal(article.published, "2026-11-20T09:30:00+09:00");
+  const text = formatPage({ url: "https://news.example/1", ...article });
+  assert.match(text, /^# 기사 제목 테스트( - 테스트 뉴스)?\nSource: 테스트 뉴스 \| Author: 테스트 기자 \| Published: 2026-11-20 \| URL: https:\/\/news\.example\/1\n\n/, text);
+  assert.equal(formatPage({ url: "https://x.example/", markdown: "본문" }), "URL: https://x.example/\n\n본문");
+}
+
+// PDF: text per page, real metadata kept, placeholder authors dropped
+{
+  const makePdf = (lines, info) => {
+    const stream = `BT /F1 12 Tf 20 80 Td 14 TL ${lines.map((l) => `(${l}) Tj T*`).join(" ")} ET`;
+    const objs = [
+      "<< /Type /Catalog /Pages 2 0 R >>",
+      "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+      "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 120] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+      `<< ${Object.entries(info).map(([k, v]) => `/${k} (${v})`).join(" ")} >>`,
+    ];
+    let out = "%PDF-1.4\n";
+    const offsets = objs.map((o, i) => { const at = out.length; out += `${i + 1} 0 obj\n${o}\nendobj\n`; return at; });
+    const xref = out.length;
+    out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, "0")} 00000 n \n`).join("")}`;
+    out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R /Info 6 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+    return Buffer.from(out, "latin1");
+  };
+  const pdf = await pdfToMarkdown(makePdf(["Hello linkbrief", "Second line"], { Title: "Test Report", Author: "Jane Doe", CreationDate: "D:20250102030405" }));
+  assert.equal(pdf.pages, 1);
+  assert.equal(pdf.title, "Test Report");
+  assert.equal(pdf.byline, "Jane Doe");
+  assert.match(pdf.markdown, /^## Page 1\n\nHello linkbrief\s+Second line/);
+  assert.match(formatPage({ url: "https://x.example/a.pdf", ...pdf }), /Author: Jane Doe \| Published: 2025-01-02 \| PDF, 1 pages/);
+  assert.equal((await pdfToMarkdown(makePdf(["x"], { Author: "User" }))).byline, "");
+}
+
+// Bot-check pages are detected, not treated as content
+assert.ok(isBotWall('<html><head><title>Just a moment...</title></head><body><script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script></body></html>'));
+assert.ok(isBotWall("<html><head><title>잠시만 기다리십시오…</title></head></html>"));
+assert.ok(!isBotWall(fixture("article-with-nav.html")));
+
+// Browser discovery honours LINKBRIEF_BROWSER
+{
+  const saved = process.env.LINKBRIEF_BROWSER;
+  process.env.LINKBRIEF_BROWSER = "off";
+  assert.equal(findBrowser(), null);
+  process.env.LINKBRIEF_BROWSER = "Z:\\no\\such\\browser.exe";
+  assert.equal(findBrowser(), null);
+  if (saved === undefined) delete process.env.LINKBRIEF_BROWSER; else process.env.LINKBRIEF_BROWSER = saved;
+}
+
+// Headless rendering (skipped when no Chrome/Edge or puppeteer-core): JS-built content appears,
+// and the page's own request to a private address is blocked.
+if (findBrowser() && await import("puppeteer-core").then(() => true, () => false)) {
+  const html = `<html><head><title>start</title></head><body><div id="app"></div><script>
+    document.getElementById("app").innerHTML = "<article><h1>CSR</h1><p>" + "rendered by script. ".repeat(30) + "</p></article>";
+    fetch("http://127.0.0.1:9/secret").then(() => { document.title = "LEAKED"; }, () => { document.title = "blocked"; });
+  </script></body></html>`;
+  const r = await renderPage(`data:text/html,${encodeURIComponent(html)}`, assertPublicUrl).catch((err) => {
+    if (/Failed to launch|sandbox/i.test(err.message)) return null; // e.g. CI runners without a usable Chrome sandbox
+    throw err;
+  });
+  if (r) {
+    assert.match(r.html, /rendered by script\. rendered by script\./);
+    assert.match(r.html, /<title>blocked<\/title>/, "private request from the page must be aborted");
+  } else console.log("(skipped browser test: browser could not launch here)");
+} else console.log("(skipped browser test: no Chrome/Edge or puppeteer-core)");
 
 // Extraction: no article -> whole body fallback
 assert.match(extract("<html><body><div>짧은 페이지</div></body></html>").markdown, /짧은 페이지/);
