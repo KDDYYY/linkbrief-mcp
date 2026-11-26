@@ -148,6 +148,8 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 | `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium, Stack Overflow, npm 웹사이트) |
 | `Refusing to fetch a private or local address` | `localhost`·사내망 주소는 보안상 막혀 있습니다 |
 | `PDF has no extractable text` | 스캔 이미지로 된 PDF입니다 (글자 인식 OCR은 지원 안 함) |
+| `This Naver Cafe post can only be read after logging in` | 카페 회원이나 로그인한 사람만 볼 수 있는 글입니다. 글 내용을 직접 붙여 넣어 주세요 |
+| `For Naver Cafe, pass the post's full URL` | 글 화면의 "URL 복사"로 `clubid`·`articleid`(또는 `/cafes/숫자/articles/숫자`)가 든 주소를 주세요 |
 | `Could not reach ...` / 시간 초과 | 사이트가 느리거나 막혔습니다. 잠시 후 다시 시도하세요 (자동으로 1회 재시도합니다) |
 | `Google search result pages block automated access` | Google 검색 결과 대신 결과 글의 주소를 직접 주세요 |
 | 설치 시 `npx` 오류, `EBADENGINE` 경고 | Node.js 22.12 이상인지 확인: `node --version` |
@@ -190,7 +192,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 | PDF (영어·한국어 확인, 페이지별 구분) | ✅ |
 | JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
 | EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
-| 네이버 카페 | ⏳ 준비 중 (대부분 회원 전용) |
+| 네이버 카페 | ⚠️ 로그인 없이 공개된 글만. 로그인·회원 전용 글은 읽지 않고 그렇다고 알려 줍니다 (내 계정을 쓰지 않음) |
 | Medium, Stack Overflow 등 봇 확인(Cloudflare)을 거는 사이트 | ❌ 우회하지 않습니다 |
 | Google 검색 결과 페이지 | ❌ Google이 자동 접근을 막습니다. Claude의 웹 검색을 쓰세요 |
 | YouTube 자막, 로그인이 필요한 글, 스캔 PDF, 이미지·동영상 | ❌ |
@@ -262,6 +264,6 @@ MIT
 
 **Safety:** refuses localhost, private/link-local networks and cloud metadata addresses (re-checked on every redirect and browser request), reads at most 5 MB per page and 30 MB per PDF, and accepts HTML/text/PDF only.
 
-**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow), YouTube transcripts, pages behind a login, scanned PDFs.
+**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow), YouTube transcripts, pages behind a login (Naver Cafe posts are read only when public, otherwise reported), scanned PDFs.
 
 Development: `npm test` (offline), `npm run check:live` (real sites). Site-specific rules live in `sites.mjs`. License: MIT.

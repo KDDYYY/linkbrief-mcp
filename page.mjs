@@ -7,7 +7,7 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { findBrowser, renderPage } from "./browser.mjs";
-import { normalizeUrl } from "./sites.mjs";
+import { normalizeUrl, sites } from "./sites.mjs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
@@ -163,12 +163,13 @@ export async function readBody(res) {
   return decoder.decode(bytes).normalize("NFC"); // windows-1258 (Vietnamese) decodes tones as combining marks
 }
 
-function get(url, cookie) {
+function get(url, cookie, extraHeaders) {
   const once = () => fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36",
       "Accept-Language": "ko-KR,ko;q=0.9,en;q=0.8",
       ...(cookie && { Cookie: cookie }),
+      ...extraHeaders,
     },
     redirect: "manual", // each hop is re-checked by assertPublicUrl
     signal: AbortSignal.timeout(20000),
@@ -205,7 +206,9 @@ export function fetchText(raw, { links = true, render = false } = {}) {
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
   // Always a promise: normalizeUrl can throw (bad URL, refused site) and fetch_pages relies on rejections.
-  const promise = Promise.resolve().then(() => (render ? fetchRendered(normalizeUrl(raw), links) : fetchUncached(raw, { links })));
+  // API-backed sites (Naver Cafe) skip the browser: rendering only yields the app's empty frame.
+  const useBrowser = () => render && !sites.some((s) => s.api && s.match(new URL(raw)));
+  const promise = Promise.resolve().then(() => (useBrowser() ? fetchRendered(normalizeUrl(raw), links) : fetchUncached(raw, { links })));
   cache.delete(key); // re-insert so an expired entry moves to the newest end for eviction
   cache.set(key, { at: Date.now(), promise });
   promise.catch(() => cache.delete(key)); // never cache failures
@@ -246,7 +249,23 @@ function browserRetryable(message, url) {
   return Object.assign(new Error(message), { browserUrl: url });
 }
 
+// Sites whose page is an empty app shell (Naver Cafe) are read from the JSON API the page itself uses.
+async function fetchViaApi(site, u, links) {
+  const apiUrl = site.api(u);
+  await assertPublicUrl(apiUrl);
+  const res = await get(apiUrl, null, site.headers);
+  let json;
+  try { json = JSON.parse((await readBytes(res, MAX_BYTES)).toString("utf8")); } catch {
+    throw new Error(`Unexpected response from ${site.name} (HTTP ${res.status}) for ${u.href}`);
+  }
+  const { html, ...meta } = site.fromApi(json);
+  const { markdown } = extract(`<html><body><article>${html}</article></body></html>`, { links });
+  return { url: u.href, text: formatPage({ url: u.href, ...meta, markdown }) };
+}
+
 async function fetchPlain(raw, { links }) {
+  const apiSite = sites.find((s) => s.api && s.match(new URL(raw)));
+  if (apiSite) return fetchViaApi(apiSite, new URL(raw), links);
   let url = normalizeUrl(raw);
   // Some sites (Brunch) set a cookie and redirect to the same URL; without it they loop forever.
   // shortcut: cookies are kept per host for this one request only and ignore Path/Domain/Expires.
