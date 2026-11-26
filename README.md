@@ -26,6 +26,12 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
+Windows(PowerShell·명령 프롬프트)에서는 `npx`를 `cmd /c`로 감싸야 연결이 안정적입니다:
+
+```powershell
+claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
+```
+
 **2. 연결 확인** — Claude Code를 다시 열고 대화창에 `/mcp`를 입력하면 연결된 MCP 서버 목록이 나옵니다. `linkbrief`가 연결됨으로 보이고 도구 `fetch_page`, `fetch_pages`가 있으면 준비 끝입니다. (터미널에서는 `claude mcp list`)
 
 **3. 그냥 부탁하기** — 명령어를 외울 필요가 없습니다. 링크와 함께 평소처럼 말하면 Claude가 알아서 linkbrief를 불러 씁니다.
@@ -85,6 +91,12 @@ Node.js 22.12 이상이 필요합니다 (Node 20은 2026년 4월 지원 종료).
 
 ```bash
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
+```
+
+Windows(PowerShell·명령 프롬프트)에서는 `npx`를 `cmd /c`로 감싸야 연결이 안정적입니다:
+
+```powershell
+claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 ```
 
 **Claude Desktop** — `claude_desktop_config.json`에 추가 (설정 → 개발자 → 설정 편집):
@@ -312,7 +324,7 @@ MIT
 
 **Quick start (Claude Code):** run `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp` (npx fetches it from npm; no separate install), reopen Claude Code and type `/mcp` to see `linkbrief` connected with the `fetch_page` and `fetch_pages` tools, then just ask with a link. linkbrief is a tool the agent uses: Claude decides when to call it, picks `fetch_pages` for several links, and reads long pages in parts on its own.
 
-**Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp`
+**Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp` (on Windows: `claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp`)
 **Claude Desktop:** add `"linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }` under `mcpServers`.
 **Codex:** add `[mcp_servers.linkbrief]` with `command = "npx"` and `args = ["-y", "linkbrief-mcp"]` to `~/.codex/config.toml`.
 
