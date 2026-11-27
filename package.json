@@ -9,6 +9,7 @@
   },
   "files": [
     "server.mjs",
+    "tools.mjs",
     "page.mjs",
     "browser.mjs",
     "office.mjs",
@@ -20,7 +21,7 @@
   },
   "scripts": {
     "start": "node server.mjs",
-    "test": "node test.mjs",
+    "test": "node test.mjs && node test-http.mjs && node test-fuzz.mjs",
     "check:live": "node scripts/live-check.mjs",
     "build:mcpb": "node scripts/build-mcpb.mjs"
   },

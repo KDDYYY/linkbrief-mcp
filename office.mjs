@@ -80,6 +80,7 @@ function pptx(files) {
 }
 
 const MAX_ROWS = 200;
+const MAX_COLS = 50;
 function xlsx(files) {
   const shared = [...(files["xl/sharedStrings.xml"] || "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, si]) => texts(si, "t"));
   const rels = Object.fromEntries([...(files["xl/_rels/workbook.xml.rels"] || "").matchAll(/<Relationship [^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map(([, id, t]) => [id, `xl/${t.replace(/^\/?xl\//, "")}`]));
@@ -94,7 +95,7 @@ function xlsx(files) {
         const v = /<v>([^<]*)<\/v>/.exec(inner || "")?.[1];
         values[ref ? col(ref) : values.length] = kind === "s" ? shared[Number(v)] ?? "" : kind === "inlineStr" ? texts(inner || "", "t") : unxml(v ?? "");
       }
-      return Array.from(values, (x) => x ?? "");
+      return Array.from(values.slice(0, MAX_COLS), (x) => x ?? "");
     }).filter((r) => r.some(Boolean));
     if (!rows.length) return `## Sheet: ${s.name}\n\n(empty)`;
     const note = rows.length > MAX_ROWS ? `\n\n(First ${MAX_ROWS} of ${rows.length} rows.)` : "";

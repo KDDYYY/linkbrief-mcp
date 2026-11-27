@@ -360,7 +360,7 @@ All optional, as environment variables (in Claude Desktop/Codex config under `en
 
 ```bash
 npm install
-npm test                       # offline tests (no network)
+npm test                       # unit tests, local-server end-to-end tests and fuzzing (no network)
 npm run check:live             # check real sites (needs internet)
 npm run check:live -- <URL>    # check specific addresses
 node page.mjs <URL>            # print the extraction for one page
@@ -369,13 +369,15 @@ node page.mjs <URL> --render   # same, through the browser
 
 | File | Role |
 |---|---|
-| `server.mjs` | MCP server; defines `fetch_page` and `fetch_pages` |
+| `server.mjs` | stdio entry point |
+| `tools.mjs` | MCP tools: `fetch_page`, `fetch_pages`, `fetch_site` |
 | `page.mjs` | Fetching, safety checks, encodings, extraction (Readability → Markdown), PDFs, cache |
 | `browser.mjs` | Reading JavaScript pages with the installed Chrome or Edge (optional) |
 | `office.mjs` | Word, PowerPoint, Excel and Hangul (.hwpx) files |
 | `robots.mjs` | robots.txt parsing |
 | `manifest.json`, `server.json` | Claude Desktop extension and MCP Registry metadata (`npm run build:mcpb` builds `dist/linkbrief.mcpb`) |
 | `sites.mjs` | Per-site rules |
+| `test.mjs`, `test-http.mjs`, `test-fuzz.mjs` | Unit tests; the full fetch path and MCP tools against a local HTTP server; seeded random-input checks |
 | `fixtures/` | Test HTML written for this project (it mimics site structure; no real articles) |
 
 ### Adding a site

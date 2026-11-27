@@ -75,7 +75,7 @@ export const sites = [
   {
     // Issue and PR pages are heavy apps; the API gives the description, every comment and the changed files.
     name: "github-issue",
-    match: (u) => u.hostname === "github.com" && /^\/[^/]+\/[^/]+\/(issues|pull)\/\d+\/?$/.test(u.pathname),
+    match: (u) => u.hostname === "github.com" && /^\/[^/]+\/[^/]+\/(issues|pull)\/\d+(\/(files|commits|checks))?\/?$/.test(u.pathname),
     async load(u, getJson) {
       const [, owner, repo, , num] = /^\/([^/]+)\/([^/]+)\/(issues|pull)\/(\d+)/.exec(u.pathname);
       const base = `https://api.github.com/repos/${owner}/${repo}`;
@@ -145,7 +145,8 @@ export const sites = [
       let level = story.kids || [];
       while (level.length && byId.size < MAX) {
         const batch = level.slice(0, MAX - byId.size);
-        const got = await Promise.all(batch.map(item));
+        const got = [];
+        for (let i = 0; i < batch.length; i += 20) got.push(...(await Promise.all(batch.slice(i, i + 20).map(item)))); // 20 at a time
         got.forEach((c) => c && byId.set(c.id, c));
         level = got.flatMap((c) => (c && !c.deleted && !c.dead ? c.kids || [] : []));
       }

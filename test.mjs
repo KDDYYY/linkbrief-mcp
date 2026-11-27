@@ -169,6 +169,70 @@ assert.equal(normalizeUrl("https://blog.google/"), "https://blog.google/");
   assert.ok(!isAllowed(multi, "/x/1"), "consecutive User-agent lines share one group");
 }
 
+// SSRF bypass attempts: every alternative spelling of a private or local address is refused
+for (const u of [
+  "http://2130706433/", "http://0x7f000001/", "http://0177.0.0.1/", "http://127.1/", "http://127.0.0.1.:80/",
+  "http://localhost./", "http://LOCALHOST/", "http://user:pass@127.0.0.1/", "http://0.0.0.0/", "http://[::]/",
+  "http://[::ffff:7f00:1]/", "http://[64:ff9b::7f00:1]/", "http://[2002:7f00:1::]/", "http://[fd00:ec2::254]/",
+  "http://100.64.0.1/", "http://169.254.169.254/latest/meta-data/", "http://192.168.0.1:8080/admin",
+  "http://localtest.me/", // public DNS name that resolves to 127.0.0.1 (rejected either way if DNS is offline)
+  "ftp://example.com/", "gopher://example.com/", "data:text/html,hi", "javascript:alert(1)",
+]) await assert.rejects(assertPublicUrl(u), /private or local|Only http\/https|Could not resolve/, u);
+assert.ok(!isBlockedIp("2001:4860:4860::8888"), "ordinary public IPv6 stays allowed");
+
+// Paging never splits a surrogate pair
+{
+  const text = "a".repeat(9) + "😀" + "b".repeat(20);
+  const first = paginate(text, 0, 10);
+  assert.ok(first.startsWith("a".repeat(9) + "\n\n[Truncated: showing characters 0-9 "), first);
+  assert.ok(paginate(text, 9, 10).startsWith("😀"));
+}
+
+// Header fields with line breaks stay on one line; ~~~ fences hide headings
+{
+  const t = formatPage({ url: "https://x.example/", title: "Two\n\nlines", byline: "A\nB", markdown: "## Real\n\n~~~\n## not a heading\n~~~\n\ntext" });
+  assert.match(t, /^# Two lines\nAuthor: A B \| URL: https:\/\/x\.example\/\n\n## Real/);
+  assert.match(outline(t), /Outline: 1 sections/);
+}
+
+// Headings made only of markup are listed as (untitled) and readable by number (found by test-fuzz.mjs)
+{
+  const t = formatPage({ url: "https://x.example/", markdown: "## **\n\nhidden body\n\n## Next\n\nmore" });
+  assert.match(outline(t), /- #1 \(untitled\) \(\d+ chars\): hidden body/);
+  assert.match(section(t, "#1"), /hidden body/);
+}
+
+// GitHub PR sub-pages use the API loader too
+for (const p of ["/a/b/pull/1/files", "/a/b/pull/1/commits/", "/a/b/issues/9"]) assert.ok(sites.find((s) => s.name === "github-issue").match(new URL(`https://github.com${p}`)), p);
+assert.ok(!sites.find((s) => s.name === "github-issue").match(new URL("https://github.com/a/b/pull/1/files/abc")));
+
+// Excel: very wide sheets are cut to 50 columns
+{
+  const cells = Array.from({ length: 80 }, (_, i) => `<c r="${String.fromCharCode(65 + Math.floor(i / 26) - 1 || 64).replace("@", "")}${String.fromCharCode(65 + (i % 26))}1" t="inlineStr"><is><t>c${i}</t></is></c>`).join("");
+  const wide = officeToMarkdown(Buffer.from(zipSync({
+    "xl/workbook.xml": strToU8('<workbook><sheets><sheet name="W" r:id="r1"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels": strToU8('<Relationships><Relationship Id="r1" Target="worksheets/sheet1.xml"/></Relationships>'),
+    "xl/worksheets/sheet1.xml": strToU8(`<worksheet><sheetData><row r="1">${cells}</row></sheetData></worksheet>`),
+  })), "xlsx");
+  assert.equal(wide.markdown.split("\n")[2].split(" | ").length, 50);
+}
+
+// Hacker News: comments are fetched in batches and all arrive
+{
+  let inFlight = 0, peak = 0;
+  const kids = Array.from({ length: 45 }, (_, i) => i + 2);
+  const getJson = async (url) => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    await new Promise((r) => setTimeout(r, 2));
+    inFlight--;
+    const id = Number(/item\/(\d+)\.json/.exec(url)[1]);
+    return id === 1 ? { id: 1, title: "t", by: "op", time: 1, kids, descendants: 45 } : { id, by: `u${id}`, time: 1, text: `c${id}` };
+  };
+  const hn = await sites.find((s) => s.name === "hacker-news").load(new URL("https://news.ycombinator.com/item?id=1"), getJson);
+  assert.ok(peak <= 20, `at most 20 requests at once, saw ${peak}`);
+  assert.equal((hn.html.match(/<blockquote>/g) || []).length, 45);
+}
+
 // Icon-only link (text hidden inside a dropped <svg>) leaves no "[](...)"
 assert.ok(!extract('<body><p><a href="/home"><svg><title>home</title></svg></a> 홈 메뉴 아래 본문 텍스트</p></body>').markdown.includes("]("));
 

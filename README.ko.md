@@ -345,7 +345,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 
 ```bash
 npm install
-npm test                       # 오프라인 테스트 (네트워크 불필요)
+npm test                       # 단위 테스트, 로컬 서버 종단 테스트, 무작위 입력 테스트 (네트워크 불필요)
 npm run check:live             # 실제 사이트 점검 (인터넷 필요)
 npm run check:live -- <URL>    # 특정 주소만 점검
 node page.mjs <URL>            # 한 페이지의 추출 결과 보기
@@ -354,13 +354,15 @@ node page.mjs <URL> --render   # 브라우저로 읽은 결과 보기
 
 | 파일 | 역할 |
 |---|---|
-| `server.mjs` | MCP 서버, `fetch_page`·`fetch_pages` 도구 정의 |
+| `server.mjs` | stdio 실행 진입점 |
+| `tools.mjs` | MCP 도구: `fetch_page`·`fetch_pages`·`fetch_site` |
 | `page.mjs` | 가져오기·보안 검사·인코딩·본문 추출(Readability → Markdown)·PDF·캐시 |
 | `browser.mjs` | 설치된 Chrome·Edge로 JavaScript 페이지 읽기 (선택) |
 | `office.mjs` | Word·PowerPoint·Excel·한글(.hwpx) 문서 |
 | `robots.mjs` | robots.txt 해석 |
 | `manifest.json`, `server.json` | Claude Desktop 확장과 MCP Registry 정보 (`npm run build:mcpb`로 `dist/linkbrief.mcpb` 생성) |
 | `sites.mjs` | 사이트별 규칙 (주소 바꾸기, 거절 안내) |
+| `test.mjs`, `test-http.mjs`, `test-fuzz.mjs` | 단위 테스트, 로컬 서버로 실제 요청 흐름과 MCP 도구 전체 검사, 고정 시드 무작위 입력 검사 |
 | `fixtures/` | 테스트용 HTML (실제 글이 아닌, 구조만 본뜬 직접 작성한 내용) |
 
 ### 사이트 추가하기

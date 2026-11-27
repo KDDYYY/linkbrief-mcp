@@ -109,6 +109,9 @@ function shortDate(s) {
 
 // "# title" + one line of source info + body, so Claude can cite where a summary came from.
 export function formatPage({ url, title, byline, siteName, published, pages, markdown }) {
+  // Header fields stay on one line: outline/section split the header from the body at the first blank line.
+  const one = (s) => (s ? String(s).replace(/\s+/g, " ").trim() : "");
+  [title, byline, siteName, published] = [title, byline, siteName, published].map(one);
   const info = [
     siteName && `Source: ${siteName}`,
     byline && `Author: ${byline}`,
@@ -136,7 +139,7 @@ export function sections(md) {
   const heads = [];
   let fence = false, pos = 0;
   for (const line of md.split("\n")) {
-    if (/^\s*```/.test(line)) fence = !fence;
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
     const m = !fence && HEADING.exec(line);
     if (m) heads.push({ level: m[1].length, title: plainHeading(m[2]), start: pos });
     pos += line.length + 1;
@@ -157,7 +160,8 @@ export function outline(text) {
     const first = body.slice(s.start, s.ownEnd).split("\n").slice(1).map((l) => l.trim()).find((l) => l && !/^[|-]+$/.test(l)) || "";
     const plain = first.replace(MD_LINK, "$1").replace(/[*_`>|#]/g, "").replace(/\s+/g, " ").trim();
     const preview = plain.length > 100 ? `${plain.slice(0, 100)}…` : plain;
-    return `${"  ".repeat(s.level - top)}- #${i + 1} ${s.title} (${(s.end - s.start).toLocaleString("en-US")} chars)${preview ? `: ${preview}` : ""}`;
+    // Headings made only of markup ("## **") end up empty: label them so the agent picks them by number.
+    return `${"  ".repeat(s.level - top)}- #${i + 1} ${s.title || "(untitled)"} (${(s.end - s.start).toLocaleString("en-US")} chars)${preview ? `: ${preview}` : ""}`;
   });
   return `${head}\n\nOutline: ${secs.length} sections, ${body.length.toLocaleString("en-US")} characters in total. Read one with section="#N" or its heading text.\n\n${rows.join("\n")}`;
 }
@@ -169,6 +173,7 @@ export function section(text, wanted) {
   if (!secs.length) throw new Error("This page has no headings; read it without section.");
   const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
   const w = norm(wanted);
+  if (!w) throw new Error('Give a section number like "#3" or heading text.');
   const n = /^#(\d+)$/.exec(w);
   const hit = n ? secs[Number(n[1]) - 1] : secs.find((s) => norm(s.title) === w) || secs.find((s) => norm(s.title).includes(w));
   if (!hit) {
@@ -181,7 +186,9 @@ export function section(text, wanted) {
 // One window of a long text, plus a note telling Claude how to read the rest.
 export function paginate(text, startIndex = 0, maxLength = 20000) {
   if (startIndex > 0 && startIndex >= text.length) return `(No more content: total length is ${text.length} characters.)`;
-  const end = Math.min(text.length, startIndex + maxLength);
+  let end = Math.min(text.length, startIndex + maxLength);
+  // Never cut a surrogate pair (emoji, rare CJK) in half.
+  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
   const part = text.slice(startIndex, end);
   return end < text.length
     ? `${part}\n\n[Truncated: showing characters ${startIndex}-${end} of ${text.length}. Call fetch_page again with start_index=${end} for more.]`
@@ -191,7 +198,8 @@ export function paginate(text, startIndex = 0, maxLength = 20000) {
 const blocked = new net.BlockList();
 for (const [a, p] of [["0.0.0.0", 8], ["10.0.0.0", 8], ["100.64.0.0", 10], ["127.0.0.0", 8], ["169.254.0.0", 16],
   ["172.16.0.0", 12], ["192.0.0.0", 24], ["192.168.0.0", 16], ["198.18.0.0", 15], ["224.0.0.0", 3]]) blocked.addSubnet(a, p, "ipv4");
-for (const [a, p] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8]]) blocked.addSubnet(a, p, "ipv6");
+// NAT64 (64:ff9b::/96, 64:ff9b:1::/48) and 6to4 (2002::/16) can carry an IPv4 address such as 127.0.0.1.
+for (const [a, p] of [["::", 127], ["fc00::", 7], ["fe80::", 10], ["ff00::", 8], ["64:ff9b::", 96], ["64:ff9b:1::", 48], ["2002::", 16]]) blocked.addSubnet(a, p, "ipv6");
 
 export function isBlockedIp(ip) {
   // IPv4-mapped IPv6: "::ffff:127.0.0.1", or "::ffff:7f00:1" as new URL() writes it
@@ -208,9 +216,13 @@ export function isBlockedIp(ip) {
 // Refuse loopback, LAN, link-local and cloud-metadata addresses so a prompt-injected page
 // cannot make Claude read the user's internal network.
 // shortcut: fetch() resolves DNS again, so a DNS-rebinding host could still slip through; pin the IP via an undici dispatcher if that matters.
+// Test-only: exact host:port values the guard lets through (the test suite's local server). Nothing else sets it.
+export const testAllowHosts = new Set();
+
 export async function assertPublicUrl(url) {
   const u = new URL(url);
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Only http/https URLs are allowed: ${url}`);
+  if (testAllowHosts.has(u.host)) return;
   const host = u.hostname.replace(/^\[|\]$/g, "");
   const ips = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true }).catch(() => {
     throw new Error(`Could not resolve host: ${host}`);
@@ -229,10 +241,17 @@ async function readBytes(res, max) {
   if (Number(res.headers.get("content-length")) > max) throw new Error(tooBig);
   const chunks = [];
   let size = 0;
-  for await (const chunk of res.body ?? []) {
-    size += chunk.length;
-    if (size > max) throw new Error(tooBig);
-    chunks.push(chunk);
+  try {
+    for await (const chunk of res.body ?? []) {
+      size += chunk.length;
+      if (size > max) throw new Error(tooBig);
+      chunks.push(chunk);
+    }
+  } catch (err) {
+    if (/abort|timeout/i.test(`${err.name} ${err.message}`)) {
+      throw new Error(`Timed out after 20 s while downloading ${res.url || "the page"} (${(size / 1048576).toFixed(1)} MB received)`);
+    }
+    throw err;
   }
   return Buffer.concat(chunks);
 }
@@ -413,7 +432,10 @@ const ASSET = /\.(png|jpe?g|gif|svg|webp|ico|css|js|mjs|json|xml|txt|zip|gz|tgz|
 
 // Reads up to maxPages pages under the start page's folder, breadth-first: always honours robots.txt
 // and pauses between requests. fetcher/allow are injectable for tests.
-export async function crawlSite(start, { maxPages = 10, links = false, delayMs = 500, fetcher = fetchText, allow = robotsAllow } = {}) {
+// budgetMs stops early with what was read, so a slow site cannot push the reply past the agent's tool timeout.
+export async function crawlSite(start, { maxPages = 10, links = false, delayMs = 500, budgetMs = 45000, fetcher = fetchText, allow = robotsAllow } = {}) {
+  const deadline = Date.now() + budgetMs;
+  let timedOut = false;
   const first = new URL(normalizeUrl(start));
   first.hash = "";
   const scope = first.origin + first.pathname.replace(/[^/]*$/, "");
@@ -422,6 +444,7 @@ export async function crawlSite(start, { maxPages = 10, links = false, delayMs =
   const pages = [];
   const skipped = [];
   while (queue.length && pages.length < maxPages) {
+    if (Date.now() > deadline) { timedOut = true; break; }
     const url = queue.shift();
     if (!(await allow(url))) { skipped.push(`${url} (robots.txt)`); continue; }
     if (pages.length && delayMs) await new Promise((r) => setTimeout(r, delayMs));
@@ -440,7 +463,9 @@ export async function crawlSite(start, { maxPages = 10, links = false, delayMs =
       skipped.push(`${url} (${err.message.slice(0, 100)})`);
     }
   }
-  return { scope, pages, skipped, notRead: queue.length };
+  // Only count leftovers robots.txt would let us read (rules are cached per site, so this costs no requests).
+  const readable = await Promise.all(queue.map((u) => allow(u)));
+  return { scope, pages, skipped, notRead: readable.filter(Boolean).length, timedOut };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

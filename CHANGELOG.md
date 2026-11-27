@@ -10,6 +10,23 @@
 - **Claude Desktop extension:** `npm run build:mcpb` builds `linkbrief.mcpb` for one-click install, with an optional GitHub token setting.
 - **MCP Registry metadata:** `server.json` and `mcpName` (`io.github.KDDYYY/linkbrief-mcp`).
 
+### Fixed (found in a systematic review: coverage, line-by-line reading, attack and random-input tests)
+- NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`) and 6to4 (`2002::/16`) IPv6 addresses that wrap a private IPv4 address are now refused.
+- Paging no longer splits emoji or other surrogate pairs.
+- `~~~` code fences no longer produce fake headings in outlines.
+- A blank `section` no longer returns the first section; headings made only of markup are listed as `(untitled)`.
+- Titles or authors containing line breaks no longer break outline/section headers.
+- GitHub PR sub-pages (`/files`, `/commits`, `/checks`) use the API.
+- Excel sheets are capped at 50 columns.
+- `fetch_site` stops after 45 seconds with what it has, and no longer counts robots.txt-blocked pages as "not read".
+- Download timeouts give a clear message instead of "aborted".
+- Hacker News comments are fetched 20 at a time.
+
+### Tests
+- `test-http.mjs`: the full fetch path (redirects, cookies, size limits, zip bombs, encodings, file types, errors, cache, robots.txt, crawling) and all MCP tools against a local server.
+- `test-fuzz.mjs`: seeded random HTML, Markdown, robots.txt and Office input; paging must be lossless.
+- 22 SSRF bypass spellings. Line coverage 89% → 96%.
+
 ## 0.2.0 — 2026-11-27
 
 ### Added
