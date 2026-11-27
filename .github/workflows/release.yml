@@ -1,0 +1,53 @@
+# Publishes a release when a version tag (v1.2.3) is pushed: npm, the GitHub release with the
+# Claude Desktop extension (.mcpb), and the MCP Registry. No stored secrets: npm and the registry
+# both trust this workflow through GitHub's OIDC token (npm "Trusted Publisher" setting).
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # create the GitHub release
+  id-token: write # npm trusted publishing and MCP Registry login
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Tag matches every version field
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          node -e '
+            const v = process.argv[1], f = (p) => JSON.parse(require("fs").readFileSync(p, "utf8"));
+            const s = f("server.json");
+            const found = { "package.json": f("package.json").version, "manifest.json": f("manifest.json").version, "server.json": s.version, "server.json package": s.packages[0].version };
+            const bad = Object.entries(found).filter(([, x]) => x !== v);
+            if (bad.length) { console.error("Tag v" + v + " but", bad); process.exit(1); }' "$v"
+      - run: npm ci
+      - run: npm test
+      # Trusted publishing needs npm 11.5.1 or later.
+      - run: npm install -g npm@^11.5.1
+      - run: npm publish --access public
+      - run: npm run build:mcpb
+      - name: GitHub release with the .mcpb
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="## ${GITHUB_REF_NAME#v} " 'index($0, v) == 1 {on = 1; next} /^## / {on = 0} on' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" dist/linkbrief.mcpb --title "$GITHUB_REF_NAME" --notes "${notes:-See CHANGELOG.md}"
+      - name: MCP Registry
+        run: |
+          curl -sSfL https://github.com/modelcontextprotocol/registry/releases/download/v1.8.16/mcp-publisher_linux_amd64.tar.gz | tar xz mcp-publisher
+          ./mcp-publisher login github-oidc
+          # The registry checks that npm already serves this version, which can take a few minutes.
+          for i in $(seq 1 20); do
+            npm view "linkbrief-mcp@${GITHUB_REF_NAME#v}" version >/dev/null 2>&1 && break
+            sleep 15
+          done
+          ./mcp-publisher publish
