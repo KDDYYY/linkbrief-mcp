@@ -253,8 +253,6 @@ When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbri
 | `Old binary .hwp files are not supported` | Save the file as .hwpx or PDF, or attach it to your agent |
 | `Refusing to fetch a private or local address` | `localhost` and private network addresses are blocked for safety |
 | `PDF has no extractable text` | A scanned PDF; OCR is not supported |
-| `This Naver Cafe post can only be read after logging in` | The post is for members or logged-in users only. Paste its text instead |
-| `For Naver Cafe, pass the post's full URL` | Use the post's "copy URL" address containing `clubid` and `articleid` |
 | `Could not reach …` / timeouts | The site is slow or unreachable. Try again later (linkbrief retries once automatically) |
 | `Google search result pages block automated access` | Use your agent's own web search, or pass a result page's address |
 | `npx` errors or an `EBADENGINE` warning on install | Check `node --version` is 22.12 or later |
@@ -329,7 +327,6 @@ Main content as Markdown
 | Old binary Hangul (.hwp) | ❌ save as .hwpx or PDF |
 | JavaScript-rendered pages | ✅ automatic when Chrome or Edge is installed |
 | Shift_JIS, EUC-JP, GBK/GB2312, Big5, EUC-KR, TIS-620, windows-1258 | ✅ |
-| Naver Cafe | ⚠️ public posts only; login/member-only posts are reported, never read with your account |
 | Sites behind bot checks: Medium, Reddit, … (Stack Overflow pages other than questions) | ❌ not bypassed |
 | Google Search result pages | ❌ Google blocks automated access; use your agent's web search |
 | YouTube transcripts, pages behind a login, scanned PDFs, images, video | ❌ |
