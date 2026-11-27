@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText } from "./page.mjs";
 import { findBrowser, renderPage } from "./browser.mjs";
-import { normalizeUrl, naverCafeIds, sites } from "./sites.mjs";
+import { normalizeUrl, naverCafeIds, pickFor, sites } from "./sites.mjs";
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
@@ -115,6 +115,19 @@ assert.ok(!extract('<body><p><a href="/home"><svg><title>home</title></svg></a> 
 // Bot-check pages are detected, not treated as content
 assert.ok(isBotWall('<html><head><title>Just a moment...</title></head><body><script src="/cdn-cgi/challenge-platform/h/b/orchestrate"></script></body></html>'));
 assert.ok(isBotWall("<html><head><title>잠시만 기다리십시오…</title></head></html>"));
+assert.ok(isBotWall("<html><head><title>Reddit - Prove your humanity</title></head></html>")); // seen 2026-11-27
+
+// Namuwiki: every section kept via stable s-N ids, sidebar and "[편집]" links dropped
+{
+  const { markdown } = extract(fixture("namuwiki.html"), { pick: pickFor("https://namu.wiki/w/test") });
+  for (const s of ["개요입니다", "역사입니다", "마지막 문단입니다"]) assert.ok(markdown.includes(s), s);
+  for (const junk of ["[편집]", "사이드바", "최근 변경"]) assert.ok(!markdown.includes(junk), junk);
+  assert.equal(pickFor("https://example.com/"), undefined);
+}
+
+// Empty or fragment bodies do not crash extraction (Amazon answered HTTP 202 with no body)
+assert.equal(extract("").markdown, "");
+assert.match(extract("<p>fragment only</p>").markdown, /fragment only/);
 assert.ok(!isBotWall(fixture("article-with-nav.html")));
 // Cloudflare injects challenge-platform scripts into normal pages too (seen on discord.com)
 assert.ok(!isBotWall(fixture("article-with-nav.html").replace("</body>", '<script src="/cdn-cgi/challenge-platform/scripts/jsd/main.js"></script></body>')));

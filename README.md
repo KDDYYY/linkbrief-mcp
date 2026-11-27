@@ -256,18 +256,19 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 | 대상 | 상태 |
 |---|---|
 | 네이버 블로그, 네이버 뉴스, 다음 뉴스, 티스토리, 브런치, 벨로그, 다음 카페(공개 글) | ✅ |
-| 위키백과, BBC, 르몽드, 인민망, 타이랏, VnExpress 등 일반 기사·문서 | ✅ |
+| 위키백과(모든 언어), 나무위키, GitHub, MDN·Python 문서, Hacker News, Google 블로그 | ✅ |
+| BBC, 르몽드, 슈피겔, NHK, 인민망, 타이랏, VnExpress 등 해외 뉴스 | ✅ |
 | PDF (영어·한국어 확인, 페이지별 구분) | ✅ |
 | JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
 | EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
 | 네이버 카페 | ⚠️ 로그인 없이 공개된 글만. 로그인·회원 전용 글은 읽지 않고 그렇다고 알려 줍니다 (내 계정을 쓰지 않음) |
-| Medium, Stack Overflow 등 봇 확인(Cloudflare)을 거는 사이트 | ❌ 우회하지 않습니다 |
+| Medium, Stack Overflow, Reddit 등 봇 확인을 거는 사이트 | ❌ 우회하지 않습니다 |
 | Google 검색 결과 페이지 | ❌ Google이 자동 접근을 막습니다. Claude의 웹 검색을 쓰세요 |
 | YouTube 자막, 로그인이 필요한 글, 스캔 PDF, 이미지·동영상 | ❌ |
 
-실제 사이트 점검 결과 (`npm run check:live`, 2026-11-26) — Medium(봇 확인)과 Google 검색은 의도적으로 거절합니다:
+실제 사이트 점검 결과 (`npm run check:live`, 2026-11-27) — Medium·Reddit(봇 확인)과 Google 검색은 의도적으로 거절합니다:
 
-![국내외 23개 사이트 점검 결과](docs/images/live.png)
+![국내외 29개 사이트 점검 결과](docs/images/live.png)
 
 ## 보안
 
@@ -336,6 +337,6 @@ MIT
 
 **Safety:** refuses localhost, private/link-local networks and cloud metadata addresses (re-checked on every redirect and browser request), reads at most 5 MB per page and 30 MB per PDF, and accepts HTML/text/PDF only.
 
-**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow), YouTube transcripts, pages behind a login (Naver Cafe posts are read only when public, otherwise reported), scanned PDFs.
+**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow, Reddit), YouTube transcripts, pages behind a login (Naver Cafe posts are read only when public, otherwise reported), scanned PDFs.
 
 Development: `npm test` (offline), `npm run check:live` (real sites). Site-specific rules live in `sites.mjs`. License: MIT.

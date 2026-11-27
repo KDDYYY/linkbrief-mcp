@@ -3,6 +3,9 @@
 // and add a test in test.mjs. `refuse` explains why a page cannot be fetched instead of returning a block page.
 // A site whose page is an empty JavaScript shell can instead give `api(URL) -> JSON URL`, optional `headers`,
 // and `fromApi(json) -> { html, title, byline, siteName, published }` (throw with a reason when unreadable).
+// A site where Readability picks the wrong block can give `pick(document) -> element` holding the article.
+
+export const pickFor = (url) => sites.find((s) => s.pick && s.match(new URL(url)))?.pick;
 
 // Naver Cafe article ids from the URL forms the site uses.
 export function naverCafeIds(u) {
@@ -41,6 +44,21 @@ export const sites = [
         siteName: r.cafe?.name ? `네이버 카페 | ${r.cafe.name}` : "네이버 카페",
         published: a.writeDate ? new Date(a.writeDate).toISOString() : "",
       };
+    },
+  },
+  {
+    // Class names change every build and Readability keeps only one block of the article (3k of 44k chars).
+    // Section headings keep stable ids s-1, s-2, ...: the article is the smallest element holding all of them.
+    name: "namuwiki",
+    match: (u) => u.hostname === "namu.wiki",
+    pick(document) {
+      const sections = document.querySelectorAll('[id^="s-"]');
+      if (!sections.length) return null;
+      const last = sections[sections.length - 1];
+      let node = sections[0];
+      while (node && !node.contains(last)) node = node.parentElement;
+      node?.querySelectorAll('a[href^="/edit/"]').forEach((a) => a.remove()); // "[편집]" after every heading
+      return node;
     },
   },
   {

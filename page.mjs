@@ -7,7 +7,7 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { findBrowser, renderPage } from "./browser.mjs";
-import { normalizeUrl, sites } from "./sites.mjs";
+import { normalizeUrl, pickFor, sites } from "./sites.mjs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
@@ -50,10 +50,15 @@ const MD_LINK = /(?<!\\)\[((?:\\.|[^[\]\\])*)\]\((?:\\.|[^()\\]|\([^)]*\))*\)/g;
 
 // Main content via Readability; falls back to the whole <body> when it finds no article.
 // links: false keeps only link text; URLs often outweigh the prose (percent-encoded wiki links).
-export function extract(html, { links = true } = {}) {
+// pick: optional site rule (sites.mjs) returning the article element when Readability gets it wrong.
+export function extract(html, { links = true, pick } = {}) {
+  // linkedom gives no documentElement for empty bodies or bare fragments (Amazon answers 202 with nothing).
+  if (!/<html[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
   let article = null;
   try { article = new Readability(parseHTML(html).document).parse(); } catch { /* malformed page: use fallback */ }
   const { document } = parseHTML(html);
+  const picked = pick?.(document);
+  if (picked) article = { ...article, content: picked.innerHTML, textContent: picked.textContent };
   const useArticle = article && article.textContent.trim().length >= 200;
   const title = (article?.title || document.title || "").trim();
   const meta = (sel) => document.querySelector(sel)?.getAttribute("content")?.trim() || "";
@@ -219,7 +224,7 @@ export function fetchText(raw, { links = true, render = false } = {}) {
 // Bot-check interstitials (Cloudflare etc.) are reported, never solved or bypassed.
 // Not "cdn-cgi/challenge-platform" alone: Cloudflare also injects that script into normal pages (discord.com).
 export function isBotWall(html) {
-  return /window\._cf_chl_opt|<title>\s*(just a moment|잠시만 기다리십시오|attention required)/i.test(html);
+  return /window\._cf_chl_opt|<title>[^<]*(just a moment|잠시만 기다리십시오|attention required|prove your humanity|verify you are human|are you a robot)/i.test(html);
 }
 const botWallError = (url) => new Error(`This site shows a bot check (e.g. Cloudflare) instead of the page; linkbrief does not bypass it: ${url}`);
 
@@ -228,7 +233,7 @@ async function fetchRendered(url, links) {
   const rendered = await renderPage(url, assertPublicUrl);
   if (isBotWall(rendered.html)) throw botWallError(rendered.url);
   if (rendered.status >= 400) throw new Error(`Fetch failed in browser: HTTP ${rendered.status} for ${rendered.url}`);
-  const page = extract(rendered.html, { links });
+  const page = extract(rendered.html, { links, pick: pickFor(rendered.url) });
   if (page.markdown.length < 200) throw new Error(`Page text too short even after JavaScript rendering - page may need login: ${rendered.url}`);
   return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }) };
 }
@@ -296,7 +301,7 @@ async function fetchPlain(raw, { links }) {
     } else {
       const html = await readBody(res);
       if (isBotWall(html)) throw botWallError(url);
-      page = extract(html, { links });
+      page = extract(html, { links, pick: pickFor(url) });
       if (page.markdown.length < 200) throw browserRetryable(`Page text too short (${page.markdown.length} chars) - page may need JavaScript or login: ${url}`, url);
     }
     return { url, text: formatPage({ url, ...page }) };
