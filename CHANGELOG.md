@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1 — 2026-11-27
+
+- Releases are published by CI from a version tag (npm with provenance, GitHub release with the .mcpb, MCP Registry). No code changes.
+
 ## 0.5.0 — 2026-11-27
 
 ### Added
