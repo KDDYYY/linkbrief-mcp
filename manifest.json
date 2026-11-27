@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "linkbrief",
   "display_name": "linkbrief",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Read any link — web pages, PDFs, Office files, JavaScript pages — as clean Markdown, with ~95% fewer tokens.",
   "long_description": "linkbrief fetches pages from your own computer and returns only the main content as Markdown with title, source, author and date. It can find just the passages that mention your keywords, show an outline and read one section with a citable link, follow a site's llms.txt, read several links or a docs site at once, and reads GitHub issues and PRs, Stack Overflow, Hacker News, arXiv, PDFs and Word/PowerPoint/Excel/Hangul (hwpx) files. Private network addresses are blocked and bot checks are never bypassed.",
   "author": {

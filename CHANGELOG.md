@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.1 — 2026-11-27
+
+- README rewritten: shorter, with reference sections folded away. No code changes.
+
 ## 0.4.0 — 2026-11-27
 
 ### Added
