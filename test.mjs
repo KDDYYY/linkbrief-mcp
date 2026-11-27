@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText } from "./page.mjs";
+import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section } from "./page.mjs";
 import { findBrowser, renderPage } from "./browser.mjs";
 import { normalizeUrl, naverCafeIds, pickFor, sites } from "./sites.mjs";
 
@@ -176,6 +176,51 @@ if (findBrowser() && await import("puppeteer-core").then(() => true, () => false
 
 // Extraction: no article -> whole body fallback
 assert.match(extract("<html><body><div>짧은 페이지</div></body></html>").markdown, /짧은 페이지/);
+
+// Outline and section reading
+{
+  const page = formatPage({ url: "https://x.example/doc", title: "Doc", siteName: "Example", markdown: [
+    "Intro paragraph before any heading.",
+    "## History",
+    "**Early** days of the [project](https://x.example/p) began here.",
+    "### Origins",
+    "Where it started.",
+    "```",
+    "# not a heading inside code",
+    "```",
+    "## [2.](#toc) Usage",
+    "How to use it.",
+  ].join("\n") });
+  const o = outline(page);
+  assert.match(o, /^# Doc\nSource: Example \| URL: https:\/\/x\.example\/doc\n\nOutline: 3 sections, \d+ characters in total\./);
+  assert.match(o, /\n- #1 History \(\d+ chars\): Early days of the project began here\.\n  - #2 Origins \(\d+ chars\): Where it started\.\n- #3 2\. Usage \(\d+ chars\): How to use it\.$/);
+  assert.ok(!o.includes("not a heading"));
+  const history = section(page, "history"); // case-insensitive, includes its subsection
+  assert.match(history, /^# Doc\nSource: Example \| URL: https:\/\/x\.example\/doc\n\n## History\n[\s\S]*### Origins[\s\S]*not a heading inside code/);
+  assert.ok(!history.includes("How to use it"));
+  assert.equal(section(page, "#2").split("\n\n")[1], "### Origins\nWhere it started.\n```\n# not a heading inside code\n```");
+  assert.match(section(page, "Usage"), /## \[2\.\]\(#toc\) Usage\nHow to use it\.$/); // partial match
+  assert.throws(() => section(page, "Pricing"), /No section matches "Pricing"\. Sections: #1 History; #2 Origins; #3 2\. Usage/);
+  // MediaWiki headings (div.mw-heading + [edit] link) survive extraction
+{
+  const para = (t) => `<p>${t} ${"Lorem ipsum dolor sit amet, consectetur adipiscing elit. ".repeat(6)}</p>`;
+  const mw = `<html><body><main><div id="content">${para("Intro.")}
+    <div class="mw-heading mw-heading2"><h2 id="History">History</h2><span class="mw-editsection">[<a href="/w/index.php?action=edit&section=1">edit</a>]</span></div>${para("History text.")}
+    <div class="mw-heading mw-heading2"><h2 id="Uses">Uses</h2><span class="mw-editsection">[<a href="/w/index.php?action=edit&section=2">edit</a>]</span></div>${para("Uses text.")}
+  </div></main></body></html>`;
+  const md = extract(mw, { links: false }).markdown;
+  assert.match(md, /## History\n\nHistory text\./);
+  assert.match(md, /## Uses\n\nUses text\./);
+  assert.ok(!/\bedit\b/.test(md), md.slice(0, 200));
+}
+// PDFs: "## Page N" headings work as sections
+  const pdf = formatPage({ url: "https://x.example/a.pdf", pages: 2, markdown: "## Page 1\n\nfirst page\n\n## Page 2\n\nsecond page" });
+  assert.equal(section(pdf, "Page 2").split("\n\n").slice(1).join("\n\n"), "## Page 2\n\nsecond page");
+  // No headings
+  const flat = formatPage({ url: "https://x.example/", markdown: "just text" });
+  assert.match(outline(flat), /No headings on this page/);
+  assert.throws(() => section(flat, "x"), /no headings/);
+}
 
 // Paging
 const long = "가".repeat(50);

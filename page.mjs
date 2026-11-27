@@ -51,12 +51,23 @@ const MD_LINK = /(?<!\\)\[((?:\\.|[^[\]\\])*)\]\((?:\\.|[^()\\]|\([^)]*\))*\)/g;
 // Main content via Readability; falls back to the whole <body> when it finds no article.
 // links: false keeps only link text; URLs often outweigh the prose (percent-encoded wiki links).
 // pick: optional site rule (sites.mjs) returning the article element when Readability gets it wrong.
+// MediaWiki (Wikipedia, Fandom, …) wraps each heading in div.mw-heading beside an "[edit]" link;
+// Readability drops those link-heavy divs and the headings with them (15 of 18 h2 on a Wikipedia page).
+function unwrapMediaWikiHeadings(document) {
+  document.querySelectorAll(".mw-editsection").forEach((e) => e.remove());
+  document.querySelectorAll("div.mw-heading").forEach((div) => {
+    const h = div.querySelector("h1, h2, h3, h4, h5, h6");
+    if (h) div.replaceWith(h);
+  });
+  return document;
+}
+
 export function extract(html, { links = true, pick } = {}) {
   // linkedom gives no documentElement for empty bodies or bare fragments (Amazon answers 202 with nothing).
   if (!/<html[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
   let article = null;
-  try { article = new Readability(parseHTML(html).document).parse(); } catch { /* malformed page: use fallback */ }
-  const { document } = parseHTML(html);
+  try { article = new Readability(unwrapMediaWikiHeadings(parseHTML(html).document)).parse(); } catch { /* malformed page: use fallback */ }
+  const document = unwrapMediaWikiHeadings(parseHTML(html).document);
   const picked = pick?.(document);
   if (picked) article = { ...article, content: picked.innerHTML, textContent: picked.textContent };
   const useArticle = article && article.textContent.trim().length >= 200;
@@ -96,6 +107,64 @@ export function formatPage({ url, title, byline, siteName, published, pages, mar
   ].filter(Boolean).join(" | ");
   const heading = title && !markdown.startsWith(title) ? `# ${title}\n` : "";
   return `${heading}${info}\n\n${markdown}`;
+}
+
+// ---- Outline / section reading: let the agent see a page's structure first and read only what it needs.
+const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+const plainHeading = (s) => s.replace(MD_LINK, "$1").replace(/[*_`]/g, "").replace(/\\([[\]().#-])/g, "$1").trim();
+
+// formatPage output is "# title\ninfo line" + blank line + body; the head is kept on every outline/section reply.
+function splitHead(text) {
+  const i = text.indexOf("\n\n");
+  return i < 0 ? [text, ""] : [text.slice(0, i), text.slice(i + 2)];
+}
+
+// Headings of a Markdown body (ignoring code fences), each with the span up to the next heading
+// of the same or higher level (= the section with its subsections) and up to the very next heading (= own text).
+export function sections(md) {
+  const heads = [];
+  let fence = false, pos = 0;
+  for (const line of md.split("\n")) {
+    if (/^\s*```/.test(line)) fence = !fence;
+    const m = !fence && HEADING.exec(line);
+    if (m) heads.push({ level: m[1].length, title: plainHeading(m[2]), start: pos });
+    pos += line.length + 1;
+  }
+  return heads.map((h, i) => ({
+    ...h,
+    end: heads.slice(i + 1).find((n) => n.level <= h.level)?.start ?? md.length,
+    ownEnd: heads[i + 1]?.start ?? md.length,
+  }));
+}
+
+export function outline(text) {
+  const [head, body] = splitHead(text);
+  const secs = sections(body);
+  if (!secs.length) return `${head}\n\n(No headings on this page; it is ${body.length.toLocaleString("en-US")} characters. Read it without outline.)`;
+  const top = Math.min(...secs.map((s) => s.level));
+  const rows = secs.map((s, i) => {
+    const first = body.slice(s.start, s.ownEnd).split("\n").slice(1).map((l) => l.trim()).find((l) => l && !/^[|-]+$/.test(l)) || "";
+    const plain = first.replace(MD_LINK, "$1").replace(/[*_`>|#]/g, "").replace(/\s+/g, " ").trim();
+    const preview = plain.length > 100 ? `${plain.slice(0, 100)}…` : plain;
+    return `${"  ".repeat(s.level - top)}- #${i + 1} ${s.title} (${(s.end - s.start).toLocaleString("en-US")} chars)${preview ? `: ${preview}` : ""}`;
+  });
+  return `${head}\n\nOutline: ${secs.length} sections, ${body.length.toLocaleString("en-US")} characters in total. Read one with section="#N" or its heading text.\n\n${rows.join("\n")}`;
+}
+
+// One section with its subsections, by outline number ("#3") or heading text (exact first, then partial match).
+export function section(text, wanted) {
+  const [head, body] = splitHead(text);
+  const secs = sections(body);
+  if (!secs.length) throw new Error("This page has no headings; read it without section.");
+  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
+  const w = norm(wanted);
+  const n = /^#(\d+)$/.exec(w);
+  const hit = n ? secs[Number(n[1]) - 1] : secs.find((s) => norm(s.title) === w) || secs.find((s) => norm(s.title).includes(w));
+  if (!hit) {
+    const list = secs.slice(0, 40).map((s, i) => `#${i + 1} ${s.title}`).join("; ");
+    throw new Error(`No section matches "${wanted}". Sections: ${list}${secs.length > 40 ? "; …" : ""}`);
+  }
+  return `${head}\n\n${body.slice(hit.start, hit.end).trimEnd()}`;
 }
 
 // One window of a long text, plus a note telling Claude how to read the rest.

@@ -17,6 +17,7 @@ Give your agent a link and ask; linkbrief brings back just the main content with
 ## Why linkbrief
 
 - **~95% fewer tokens.** Most of a page's HTML is menus, ads, scripts and image URLs. linkbrief keeps the article. ([measured](#token-savings))
+- **Read only the part you need.** Ask for an outline first — headings, sizes and a one-line preview — then read just the section that matters. On a long Wikipedia article that is 87% less than reading it all.
 - **Reads what other fetchers miss.** Pages that render with JavaScript are retried in the Chrome or Edge you already have. PDFs come back as text, page by page. Requests come from your machine, so sites that block cloud fetchers still answer.
 - **Any language, any encoding.** Tested on Wikipedia in six languages, plus news and docs sites in English, French, German, Japanese, Chinese, Thai and Vietnamese. Legacy charsets (Shift_JIS, EUC-JP, GBK, Big5, EUC-KR, TIS-620, windows-1258) decode correctly.
 - **Safe by default.** Private and local network addresses are refused, bot checks are reported rather than bypassed, and the browser runs with a fresh profile every time.
@@ -83,9 +84,18 @@ Where the savings come from:
 | **Main content only** (Mozilla Readability) | Drops menus, ads, comments, footers and scripts — most of the saving |
 | **No images or icons** | Image URLs alone can double a page's size |
 | **Link URLs removed** (default) | Keeps the link text only: 49–66% less on link-heavy pages. Keep them with `include_links` |
+| **Outline first, then one section** | `outline` returns the headings with sizes; `section` returns just one part. 82–91% less than the whole page on long documents (below) |
 | **Paging** | Up to 20,000 characters per call; the agent asks for more with `start_index` only when needed |
 | **Per-page cap for many links** | `fetch_pages` returns up to 8,000 characters per page by default |
 | **10-minute cache** | Reading the next part of a page does not download it again (the second call returns in milliseconds) |
+
+Outline first, then one section, compared with reading the whole page (characters, measured 2026-11-27):
+
+| Page | Whole page | Outline + one section | Saved |
+|---|---:|---:|---:|
+| English Wikipedia, "Large language model" | 101,576 | 8,172 + 5,021 | 87% |
+| Namuwiki, "김치" | 46,131 | 2,733 + 5,355 | 82% |
+| arXiv paper PDF (15 pages) | 39,790 | 1,638 + 1,916 | 91% |
 
 ## Install
 
@@ -168,6 +178,10 @@ Talk to your agent as usual and include the link. It calls linkbrief by itself.
 
 > Summarize this and end with the source (site, author, date): https://…
 
+**Only the part you need** — the agent looks at the outline, then reads one section. You can also ask for it directly:
+
+> Show me the outline of this page first, then read only the section on training: https://en.wikipedia.org/wiki/Large_language_model
+
 **Long documents** — up to 20,000 characters per call; the agent continues with `start_index` when it needs more.
 
 > Read this whole document and summarize each chapter: https://…
@@ -235,6 +249,8 @@ When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbri
 | `start_index` | 0 | Where to continue a long page; a cut-off result tells you the next value |
 | `include_links` | false | Keep link URLs. By default only the link text is kept |
 | `render` | false | Use the browser from the start. Rarely needed: empty or blocked pages fall back automatically |
+| `outline` | false | Return only the headings, with each section's size and first line |
+| `section` | — | Return one section and its subsections: an outline number (`"#3"`) or heading text (`"History"`, `"Page 4"`) |
 
 ### `fetch_pages` — read several pages
 
@@ -244,7 +260,20 @@ When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbri
 | `max_length_per_page` | 8000 | Maximum characters per page (1,000–50,000) |
 | `include_links` | false | Keep link URLs |
 
-Every result has this shape:
+An outline looks like this:
+
+```
+# Large language model
+Source: Wikimedia Foundation, Inc. | … | URL: https://en.wikipedia.org/wiki/Large_language_model
+
+Outline: 62 sections, 101,576 characters in total. Read one with section="#N" or its heading text.
+
+- #1 History (4,837 chars): The training compute of notable large models …
+- #2 Dataset preprocessing (2,983 chars)
+  - #3 Tokenization (2,085 chars): As machine learning algorithms process numbers rather than text, …
+```
+
+Every full result has this shape:
 
 ```
 # Title
