@@ -1,91 +1,95 @@
 # linkbrief-mcp
 
-Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 서버입니다. 링크를 주고 "요약해 줘"라고 하면, linkbrief가 본문만 Markdown으로 가져오고 Claude가 정리합니다. Codex, Cursor 등 MCP를 지원하는 다른 도구에서도 똑같이 쓸 수 있습니다.
+**English** | [한국어](README.ko.md)
 
-한국 사이트에 맞춰 만들었습니다: 네이버 블로그(iframe 구조), 네이버·다음 뉴스, 티스토리, 브런치, 벨로그, 다음 카페, 그리고 EUC-KR 같은 옛 인코딩. 영어·불어·중국어·일본어·태국어·베트남어 페이지도 깨지지 않고 읽습니다.
+[![npm](https://img.shields.io/npm/v/linkbrief-mcp)](https://www.npmjs.com/package/linkbrief-mcp)
+[![test](https://github.com/KDDYYY/linkbrief-mcp/actions/workflows/test.yml/badge.svg)](https://github.com/KDDYYY/linkbrief-mcp/actions/workflows/test.yml)
+[![license](https://img.shields.io/npm/l/linkbrief-mcp)](LICENSE)
 
-[English](#english)
+Let Claude, Codex or any MCP agent **read any link** — web pages, PDFs and JavaScript-heavy pages — as clean Markdown, fetched **from your own computer**. About **95% fewer tokens** than raw HTML.
 
-![프랑스어 위키백과 글을 linkbrief로 가져와 Claude가 한국어로 요약하는 예시](docs/images/usage.png)
+Give your agent a link and ask; linkbrief brings back just the main content with its title, source, author and date, and the agent does the rest. Works in any language, including sites most fetchers get wrong: Asian sites, Naver Blog's iframe layout, Namuwiki, and legacy encodings like Shift_JIS, GBK and EUC-KR.
 
-<sub>사용 예시: `fetch_page` 호출과 결과는 실제 linkbrief 출력이고, 요약은 Claude가 그 결과로 작성한 것입니다. (문서: 프랑스어 위키백과 「Kimchi」, CC BY-SA)</sub>
+![Claude summarizing a French Wikipedia article in English with linkbrief](docs/images/usage-en.png)
 
-## 왜 필요한가요?
+<sub>Example: the `fetch_page` call and its result are real linkbrief output; the summary was written by Claude from that result. (Source: French Wikipedia, "Kimchi", CC BY-SA.)</sub>
 
-- **토큰을 95% 아낍니다.** 웹 페이지 HTML의 대부분은 메뉴·광고·스크립트·이미지 주소입니다. linkbrief는 본문만 남겨 넘깁니다. ([측정 결과](#토큰-절감-효과))
-- **막힌 사이트도 읽습니다.** Claude의 기본 웹 가져오기는 일부 사이트(예: `blog.naver.com`)가 막혀 있습니다. linkbrief는 **사용자 PC에서 일반 브라우저처럼** 요청합니다.
-- **네이버 블로그가 비어 보이지 않습니다.** 본문이 iframe 안에 있어 그냥 가져오면 비어 있는데, linkbrief는 본문이 들어 있는 모바일 주소로 바꿔 읽습니다.
-- **PDF, 여러 링크, JavaScript 페이지까지** 한 도구로 처리합니다.
-- **API 키가 필요 없습니다.** 요약은 사용 중인 Claude가 합니다.
+## Why linkbrief
 
-## 빠른 시작 (Claude Code 기준, 3단계)
+- **~95% fewer tokens.** Most of a page's HTML is menus, ads, scripts and image URLs. linkbrief keeps the article. ([measured](#token-savings))
+- **Reads what other fetchers miss.** Pages that render with JavaScript are retried in the Chrome or Edge you already have. PDFs come back as text, page by page. Requests come from your machine, so sites that block cloud fetchers still answer.
+- **Any language, any encoding.** Tested on Wikipedia in six languages, plus news and docs sites in English, French, German, Japanese, Chinese, Thai and Vietnamese. Legacy charsets (Shift_JIS, EUC-JP, GBK, Big5, EUC-KR, TIS-620, windows-1258) decode correctly.
+- **Safe by default.** Private and local network addresses are refused, bot checks are reported rather than bypassed, and the browser runs with a fresh profile every time.
+- **No API key.** The agent you already use does the summarizing.
 
-**1. 설치** — 터미널에서 한 줄. npm에서 자동으로 받아 실행하므로 `npm install`을 따로 할 필요가 없습니다.
+## Quick start (Claude Code)
+
+**1. Install** — one line. `npx` fetches the package from npm, so there is nothing else to install.
 
 ```bash
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
-Windows(PowerShell·명령 프롬프트)에서는 `npx`를 `cmd /c`로 감싸야 연결이 안정적입니다:
+On Windows (PowerShell or Command Prompt), wrap `npx` in `cmd /c` for a reliable connection:
 
 ```powershell
 claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 ```
 
-**2. 연결 확인** — Claude Code를 다시 열고 대화창에 `/mcp`를 입력하면 연결된 MCP 서버 목록이 나옵니다. `linkbrief`가 연결됨으로 보이고 도구 `fetch_page`, `fetch_pages`가 있으면 준비 끝입니다. (터미널에서는 `claude mcp list`)
+**2. Check the connection** — reopen Claude Code and type `/mcp`. You should see `linkbrief` connected with two tools, `fetch_page` and `fetch_pages`. (From a terminal: `claude mcp list`.)
 
-**3. 그냥 부탁하기** — 명령어를 외울 필요가 없습니다. 링크와 함께 평소처럼 말하면 Claude가 알아서 linkbrief를 불러 씁니다.
+**3. Just ask** — no commands to learn. Paste a link and say what you want:
 
-> 이 글 3줄로 요약해 줘: https://blog.naver.com/아이디/글번호
+> Summarize this in 5 bullet points: https://en.wikipedia.org/wiki/Large_language_model
 
-Claude Desktop, Codex, Cursor 설정은 아래 [설치](#설치)를 보세요.
+Setup for Claude Desktop, Codex and Cursor is under [Install](#install).
 
-### 어떻게 동작하나요?
+### How it works
 
-linkbrief는 **에이전트가 쓰는 도구**입니다. 무엇을 언제 읽을지는 Claude(에이전트)가 대화를 보고 스스로 정합니다.
+linkbrief is a **tool your agent uses**. The agent decides what to read and when.
 
 ```
-사용자: "이 두 기사 비교해 줘: 링크1 링크2"
+You: "Compare these two articles: <link 1> <link 2>"
    │
    ▼
-Claude(에이전트) ── 링크가 여러 개네 → fetch_pages 호출
-   │                    글이 길어서 잘렸네 → fetch_page로 이어 읽기
+Agent (Claude, Codex, …) ── two links → calls fetch_pages
+   │                         page was cut off → calls fetch_page to read the rest
    ▼
-linkbrief (내 PC에서 실행) ── 페이지·PDF를 받아 본문만 Markdown으로 정리
+linkbrief (runs on your machine) ── fetches pages/PDFs, keeps only the main content as Markdown
    │
    ▼
-Claude가 읽고 비교·요약해서 답변
+Agent reads it and answers
 ```
 
-- 링크가 하나면 `fetch_page`, 여러 개면 `fetch_pages`를 Claude가 골라 씁니다.
-- 글이 길면 결과 끝의 안내를 보고 Claude가 **스스로 다음 부분을 이어서** 읽습니다.
-- 처음 쓸 때 Claude가 도구 사용 허락을 물으면 허용하세요. 매번 묻지 않게 하려면 허락 창에서 "항상 허용"을 고르면 됩니다.
+- One link → `fetch_page`; several → `fetch_pages`. The agent picks.
+- When a page is long, the result ends with a note and the agent **continues reading on its own**.
+- The first time, your agent may ask permission to use the tool. Choose "always allow" to skip the prompt next time.
 
-## 토큰 절감 효과
+## Token savings
 
-블로그·뉴스·위키 등 실제 국내외 페이지를 원본 HTML 그대로 넘길 때와 linkbrief 결과를 비교했습니다 (글자 수 기준, 2026-11-26 측정).
+We compared the raw HTML of real blog, news and wiki pages from several countries with what linkbrief returns (character counts, measured 2026-11-26).
 
-| | 원본 HTML | linkbrief 결과 |
+| | Raw HTML | linkbrief |
 |---|---:|---:|
-| 분량 | 약 202만 자 | 약 9만 자 |
-| **절감** | | **약 95% (페이지별 92~99%)** |
+| Size | ~2.02M characters | ~92K characters |
+| **Saved** | | **~95% (92–99% per page)** |
 
-토큰 수는 글자 수에 대체로 비례하므로, 같은 내용을 읽는 데 드는 토큰도 이 정도 줄어듭니다. 토큰이 줄면 **사용량 한도가 덜 차고, 응답이 빨라지고, 긴 대화에서도 앞 내용을 덜 잊습니다.**
+Tokens scale roughly with characters, so the token saving is about the same. Fewer tokens means **usage limits last longer, answers come faster, and long conversations keep more context.**
 
-절감이 일어나는 곳:
+Where the savings come from:
 
-| 방법 | 효과 |
+| Method | Effect |
 |---|---|
-| **본문만 추출** (Mozilla Readability) | 메뉴·광고·댓글·푸터·스크립트 제거 — 절감의 대부분 |
-| **이미지·아이콘 제거** | 이미지 주소만으로 분량이 2배가 되는 페이지도 있습니다 |
-| **링크 주소 제거** (기본값) | 링크 글자만 남김. 링크가 많은 문서에서 49~66% 추가 감소. 필요하면 `include_links`로 유지 |
-| **나눠 읽기** | 한 번에 2만 자까지만 넘기고, 더 필요할 때만 `start_index`로 이어 읽음 |
-| **여러 링크는 페이지당 상한** | `fetch_pages`는 기본 페이지당 8천 자 |
-| **10분 캐시** | 같은 페이지를 이어 읽을 때 다시 내려받지 않음 (두 번째 요청이 1천 분의 몇 초 만에 끝남) |
+| **Main content only** (Mozilla Readability) | Drops menus, ads, comments, footers and scripts — most of the saving |
+| **No images or icons** | Image URLs alone can double a page's size |
+| **Link URLs removed** (default) | Keeps the link text only: 49–66% less on link-heavy pages. Keep them with `include_links` |
+| **Paging** | Up to 20,000 characters per call; the agent asks for more with `start_index` only when needed |
+| **Per-page cap for many links** | `fetch_pages` returns up to 8,000 characters per page by default |
+| **10-minute cache** | Reading the next part of a page does not download it again (the second call returns in milliseconds) |
 
-## 설치
+## Install
 
-Node.js 22.12 이상이 필요합니다 (Node 20은 2026년 4월 지원 종료).
+Requires Node.js 22.12 or later.
 
 **Claude Code**
 
@@ -93,13 +97,13 @@ Node.js 22.12 이상이 필요합니다 (Node 20은 2026년 4월 지원 종료).
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
-Windows(PowerShell·명령 프롬프트)에서는 `npx`를 `cmd /c`로 감싸야 연결이 안정적입니다:
+On Windows:
 
 ```powershell
 claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 ```
 
-**Claude Desktop** — `claude_desktop_config.json`에 추가 (설정 → 개발자 → 설정 편집):
+**Claude Desktop** — add to `claude_desktop_config.json` (Settings → Developer → Edit Config):
 
 ```json
 {
@@ -109,7 +113,7 @@ claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 }
 ```
 
-**Codex (OpenAI)** — `~/.codex/config.toml`에 추가 (Codex CLI·IDE 확장·앱 공통):
+**Codex (OpenAI)** — add to `~/.codex/config.toml` (CLI, IDE extension and app):
 
 ```toml
 [mcp_servers.linkbrief]
@@ -117,11 +121,11 @@ command = "npx"
 args = ["-y", "linkbrief-mcp"]
 ```
 
-Windows에서 `npx`를 찾지 못하면 `command = "cmd"`, `args = ["/c", "npx", "-y", "linkbrief-mcp"]`로 바꾸세요. Codex CLI가 있다면 `codex mcp add linkbrief -- npx -y linkbrief-mcp`로도 등록할 수 있습니다.
+If Windows cannot find `npx`, use `command = "cmd"` and `args = ["/c", "npx", "-y", "linkbrief-mcp"]`. With the Codex CLI you can also run `codex mcp add linkbrief -- npx -y linkbrief-mcp`.
 
-**Cursor 등 다른 MCP 클라이언트** — 명령 `npx -y linkbrief-mcp`를 stdio 서버로 등록하면 됩니다.
+**Cursor and other MCP clients** — register `npx -y linkbrief-mcp` as a stdio server.
 
-**소스에서 직접 설치** — npm을 거치지 않고 GitHub 코드를 그대로 쓰려면:
+**From source**
 
 ```bash
 git clone https://github.com/KDDYYY/linkbrief-mcp.git
@@ -130,213 +134,188 @@ npm install
 claude mcp add linkbrief -s user -- node "$(pwd)/server.mjs"
 ```
 
-Windows PowerShell에서는 마지막 줄을 `claude mcp add linkbrief -s user -- node "$PWD\server.mjs"` 로 바꾸세요.
+In Windows PowerShell, use `claude mcp add linkbrief -s user -- node "$PWD\server.mjs"` for the last line.
 
-**설치 확인** — Claude Code 대화창의 `/mcp` 또는 터미널의 `claude mcp list`에서 `linkbrief`가 연결됨(`✔ Connected`)으로 보이면 준비된 것입니다. 설치·설정을 바꾼 뒤에는 Claude를 **다시 시작**해야 적용됩니다.
+**Check** — `/mcp` in Claude Code or `claude mcp list` in a terminal should show `linkbrief` connected (`✔ Connected`). Restart your agent after changing its configuration.
 
-## 사용 방법
+## Usage
 
-Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가 알아서 linkbrief 도구를 불러 본문을 읽습니다. 처음 쓸 때 도구 사용 허락을 묻는 창이 뜨면 허용해 주세요.
+Talk to your agent as usual and include the link. It calls linkbrief by itself.
 
-**기본 요약**
+**Summarize**
 
-> 이 글 한국어로 요약해 줘: https://blog.naver.com/아이디/글번호
+> Summarize this in 5 bullet points: https://en.wikipedia.org/wiki/Large_language_model
 
-**외국어 글을 한국어로** — 영어·불어·중국어·일본어·태국어·베트남어 등 어떤 언어든 됩니다.
+**Read another language, answer in yours**
 
-> https://fr.wikipedia.org/wiki/Kimchi 핵심만 5줄로 한국어 정리해 줘
+> Summarize this Japanese news page in English: https://www3.nhk.or.jp/news/
 
-**PDF** — 논문, 보도자료, 보고서 링크도 그대로 주면 됩니다. 자세한 방법은 아래 [PDF 읽기](#pdf-읽기)를 보세요.
+**PDFs** — papers, reports and press releases work with just the link. See [Reading PDFs](#reading-pdfs).
 
-> 이 논문 핵심 기여 3가지와 실험 결과만 정리해 줘: https://arxiv.org/pdf/1706.03762
+> List the paper's three main contributions and its results: https://arxiv.org/pdf/1706.03762
 
-**원하는 형식으로**
+**Pick the format**
 
-> 이 기사 3줄 요약하고, 등장하는 숫자·날짜만 표로 뽑아 줘: https://n.news.naver.com/article/...
+> Summarize this in 3 lines, then put every number and date in a table: https://…
 
-> 이 블로그 글에서 사용한 도구와 단계별 방법만 정리해 줘: https://blog.naver.com/...
+> From this tutorial, list only the tools used and the steps: https://…
 
-**여러 링크 한 번에** — 최대 10개까지 한 번에 읽어 비교합니다 (`fetch_pages`). 일부가 실패해도 나머지는 읽습니다.
+**Several links at once** — up to 10 per call (`fetch_pages`). If one fails, the others still come back.
 
-> 이 세 기사의 논조를 비교해서 공통점과 차이점을 표로 정리해 줘: https://... https://... https://...
+> Compare how these three articles cover the story, as a table: https://… https://… https://…
 
-**출처 확인** — 결과 맨 위에 사이트·작성자·작성일·주소가 붙어 있어, 요약에 출처를 함께 달라고 할 수 있습니다.
+**Cite sources** — every result starts with site, author, date and URL, so you can ask for citations.
 
-> 요약 끝에 출처(사이트, 작성자, 날짜)도 적어 줘: https://...
+> Summarize this and end with the source (site, author, date): https://…
 
-**긴 문서** — 한 번에 2만 자까지 읽고, 더 길면 Claude가 `start_index`로 이어서 읽습니다. 처음부터 끝까지 읽게 하려면:
+**Long documents** — up to 20,000 characters per call; the agent continues with `start_index` when it needs more.
 
-> 이 문서 끝까지 다 읽고 장별로 요약해 줘: https://...
+> Read this whole document and summarize each chapter: https://…
 
-**링크 주소가 필요할 때** — 기본값은 링크 글자만 남겨 분량을 줄입니다. 출처 주소까지 필요하면:
+**Keep link URLs** — off by default to save tokens. Turn them on when you need them:
 
-> 이 페이지의 참고 링크 주소까지 포함해서 정리해 줘 (include_links 켜고): https://...
+> Summarize this page and keep the reference links (include_links on): https://…
 
-### PDF 읽기
+### Reading PDFs
 
-**1. PDF 주소를 구합니다.** 웹페이지의 PDF 링크·다운로드 버튼에서 오른쪽 클릭 → **링크 주소 복사**, 또는 브라우저에 PDF가 열려 있으면 **주소창**을 복사합니다.
+**1. Get the PDF's address.** Right-click the PDF link or download button → **Copy link address**, or, if the PDF is open in your browser, copy the **address bar**.
 
-![PDF 링크를 복사해 Claude에 붙여 넣는 3단계](docs/images/pdf-link.png)
+![How to copy a PDF link and paste it to Claude](docs/images/pdf-link-en.png)
 
-**2. Claude에 주소와 함께 부탁합니다.** linkbrief가 PDF를 받아 페이지별로 글자를 뽑고, Claude가 정리합니다.
+**2. Ask your agent with the address.** linkbrief downloads the PDF and extracts its text page by page.
 
-![arXiv 논문 PDF를 linkbrief로 읽어 한국어 4줄로 요약하는 과정](docs/images/pdf-demo.gif)
+![Reading an arXiv paper PDF with linkbrief and summarizing it in four lines](docs/images/pdf-demo-en.gif)
 
-<sub>예시: `fetch_page` 결과는 실제 linkbrief 출력(저자 이메일이 나오는 줄 앞에서 생략)이고, 요약은 Claude가 그 결과로 작성한 것입니다.</sub>
+<sub>Example: the `fetch_page` result is real linkbrief output (cut before the lines with the authors' e-mail addresses); the summary was written by Claude from it.</sub>
 
-알아 두면 좋은 점:
-
-| 상황 | 동작 |
+| Situation | What happens |
 |---|---|
-| 주소가 `.pdf`로 끝나지 않음 (`download.do?id=…` 등) | 서버가 PDF를 보내 주면 자동으로 PDF로 읽습니다 |
-| 결과에 `## Page 3` 같은 쪽 표시 | "몇 쪽에 나오는지", "3쪽만 요약해 줘"처럼 물어볼 수 있습니다 |
-| 긴 PDF | 2만 자씩 나눠 읽습니다. "끝까지 읽고 요약해 줘"라고 하면 Claude가 이어서 읽습니다 |
-| 결과 맨 위 `PDF, 15 pages` 줄 | 쪽수와 PDF에 적힌 제목·작성자·작성일이 함께 붙습니다 |
-| **내 컴퓨터에 있는 PDF 파일** | linkbrief는 인터넷 주소만 읽습니다. Claude 대화창에 **파일을 직접 첨부**하세요 |
-| 로그인해야 받을 수 있는 PDF, 버튼을 눌러야 받아지는 PDF | 주소만으로 받을 수 없어 읽지 못합니다. 내려받아 직접 첨부하세요 |
-| 스캔한 이미지 PDF | 글자가 없어 읽지 못합니다 (`PDF has no extractable text`) |
-| 30MB가 넘는 PDF | 읽지 않습니다 |
+| The address does not end in `.pdf` (`download?id=…`) | Read as a PDF if the server sends one |
+| Page markers such as `## Page 3` | Ask "which page says…?" or "summarize page 3 only" |
+| Long PDFs | Read 20,000 characters at a time; ask to "read to the end" and the agent continues |
+| The `PDF, 15 pages` line at the top | Page count plus the title, author and date stored in the PDF |
+| **A PDF file on your computer** | linkbrief reads web addresses only. Attach the file to your agent directly |
+| PDFs that need a login or a button click to download | Cannot be fetched from the address alone. Download it and attach it |
+| Scanned PDFs (images of text) | No text to extract (`PDF has no extractable text`); OCR is not supported |
+| PDFs over 30 MB | Not read |
 
-### JavaScript로 그려지는 페이지
+### JavaScript-heavy pages
 
-일반 요청으로 본문이 비어 오거나 차단(403·429·503)되면, linkbrief가 **PC에 설치된 Chrome 또는 Edge를 화면 없이 띄워** 다시 읽습니다. 별도 설정은 필요 없습니다.
+When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbrief **retries in the Chrome or Edge already installed on your machine**, headless. No setup needed.
 
-- 브라우저를 새로 내려받지 않습니다. 이미 설치된 Chrome·Edge를 씁니다 (선택 패키지 `puppeteer-core`).
-- 매번 **빈 프로필**로 열기 때문에 내 로그인·쿠키는 쓰이지 않습니다.
-- 브라우저가 페이지 안에서 보내는 모든 요청에도 내부망 차단 검사를 적용합니다.
-- 끄기: 환경 변수 `LINKBRIEF_BROWSER=off`. 다른 브라우저 지정: `LINKBRIEF_BROWSER=<실행 파일 경로>`.
-- Cloudflare 같은 **봇 확인 페이지는 우회하지 않고**, 그렇다고 알려 줍니다.
+- No browser download: it uses your installed Chrome or Edge (through the optional `puppeteer-core` package).
+- A **fresh profile** every time, so your logins and cookies are never used.
+- Every request the page makes goes through the same private-address check.
+- Turn it off with `LINKBRIEF_BROWSER=off`, or point at another browser with `LINKBRIEF_BROWSER=<path to executable>`.
+- **Bot checks such as Cloudflare are reported, never bypassed.**
 
-### 잘 안 될 때
+### Troubleshooting
 
-| 증상 | 해결 |
+| Message or symptom | What to do |
 |---|---|
-| Claude가 도구를 안 쓰고 "링크를 열 수 없다"고 함 | Claude를 다시 시작했는지, `claude mcp list`에 `✔ Connected`인지 확인. "linkbrief로 읽어 줘"라고 직접 말해도 됩니다 |
-| `Page text too short` | 로그인이 필요한 페이지이거나, JavaScript 페이지인데 Chrome·Edge가 없는 경우입니다 |
-| `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium, Stack Overflow, npm 웹사이트) |
-| `Refusing to fetch a private or local address` | `localhost`·사내망 주소는 보안상 막혀 있습니다 |
-| `PDF has no extractable text` | 스캔 이미지로 된 PDF입니다 (글자 인식 OCR은 지원 안 함) |
-| `This Naver Cafe post can only be read after logging in` | 카페 회원이나 로그인한 사람만 볼 수 있는 글입니다. 글 내용을 직접 붙여 넣어 주세요 |
-| `For Naver Cafe, pass the post's full URL` | 글 화면의 "URL 복사"로 `clubid`·`articleid`(또는 `/cafes/숫자/articles/숫자`)가 든 주소를 주세요 |
-| `Could not reach ...` / 시간 초과 | 사이트가 느리거나 막혔습니다. 잠시 후 다시 시도하세요 (자동으로 1회 재시도합니다) |
-| `Google search result pages block automated access` | Google 검색 결과 대신 결과 글의 주소를 직접 주세요 |
-| 설치 시 `npx` 오류, `EBADENGINE` 경고 | Node.js 22.12 이상인지 확인: `node --version` |
+| The agent says it cannot open links instead of using the tool | Restart the agent and check `claude mcp list` shows `✔ Connected`. You can also say "read it with linkbrief" |
+| `Page text too short` | The page needs a login, or it renders with JavaScript and no Chrome/Edge was found |
+| `This site shows a bot check` | The site requires a bot check (e.g. Medium, Stack Overflow, Reddit). linkbrief does not bypass it |
+| `Refusing to fetch a private or local address` | `localhost` and private network addresses are blocked for safety |
+| `PDF has no extractable text` | A scanned PDF; OCR is not supported |
+| `This Naver Cafe post can only be read after logging in` | The post is for members or logged-in users only. Paste its text instead |
+| `For Naver Cafe, pass the post's full URL` | Use the post's "copy URL" address containing `clubid` and `articleid` |
+| `Could not reach …` / timeouts | The site is slow or unreachable. Try again later (linkbrief retries once automatically) |
+| `Google search result pages block automated access` | Use your agent's own web search, or pass a result page's address |
+| `npx` errors or an `EBADENGINE` warning on install | Check `node --version` is 22.12 or later |
 
-## 도구
+## Tools
 
-### `fetch_page` — 한 페이지 읽기
+### `fetch_page` — read one page
 
-| 인자 | 기본값 | 설명 |
+| Argument | Default | Description |
 |---|---|---|
-| `url` | (필수) | http/https 주소 (웹 페이지 또는 PDF) |
-| `max_length` | 20000 | 한 번에 돌려줄 최대 글자 수 (1,000~100,000) |
-| `start_index` | 0 | 긴 글의 다음 부분을 읽을 시작 위치. 잘린 경우 결과 끝에 다음 값이 안내됩니다 |
-| `include_links` | false | 링크 주소까지 유지할지. 기본은 링크 글자만 남깁니다 |
-| `render` | false | 처음부터 브라우저로 읽기. 보통은 필요 없습니다 (자동 대체됨) |
+| `url` | (required) | http/https address of a web page or PDF |
+| `max_length` | 20000 | Maximum characters returned per call (1,000–100,000) |
+| `start_index` | 0 | Where to continue a long page; a cut-off result tells you the next value |
+| `include_links` | false | Keep link URLs. By default only the link text is kept |
+| `render` | false | Use the browser from the start. Rarely needed: empty or blocked pages fall back automatically |
 
-### `fetch_pages` — 여러 페이지 한 번에
+### `fetch_pages` — read several pages
 
-| 인자 | 기본값 | 설명 |
+| Argument | Default | Description |
 |---|---|---|
-| `urls` | (필수) | 주소 1~10개 |
-| `max_length_per_page` | 8000 | 페이지당 최대 글자 수 (1,000~50,000) |
-| `include_links` | false | 링크 주소까지 유지할지 |
+| `urls` | (required) | 1–10 addresses |
+| `max_length_per_page` | 8000 | Maximum characters per page (1,000–50,000) |
+| `include_links` | false | Keep link URLs |
 
-결과는 항상 이런 모양입니다:
+Every result has this shape:
 
 ```
-# 제목
-Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
+# Title
+Source: Site | Author: Name | Published: 2026-11-25 | URL: https://…
 
-본문 (Markdown)
+Main content as Markdown
 ```
 
-## 지원 현황
+## Supported sites
 
-| 대상 | 상태 |
+| Target | Status |
 |---|---|
-| 네이버 블로그, 네이버 뉴스, 다음 뉴스, 티스토리, 브런치, 벨로그, 다음 카페(공개 글) | ✅ |
-| 위키백과(모든 언어), 나무위키, GitHub, MDN·Python 문서, Hacker News, Google 블로그 | ✅ |
-| BBC, 르몽드, 슈피겔, NHK, 인민망, 타이랏, VnExpress 등 해외 뉴스 | ✅ |
-| PDF (영어·한국어 확인, 페이지별 구분) | ✅ |
-| JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
-| EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
-| 네이버 카페 | ⚠️ 로그인 없이 공개된 글만. 로그인·회원 전용 글은 읽지 않고 그렇다고 알려 줍니다 (내 계정을 쓰지 않음) |
-| Medium, Stack Overflow, Reddit 등 봇 확인을 거는 사이트 | ❌ 우회하지 않습니다 |
-| Google 검색 결과 페이지 | ❌ Google이 자동 접근을 막습니다. Claude의 웹 검색을 쓰세요 |
-| YouTube 자막, 로그인이 필요한 글, 스캔 PDF, 이미지·동영상 | ❌ |
+| Wikipedia (any language), GitHub, MDN, Python docs, Hacker News, Google Blog | ✅ |
+| News: BBC, The Verge, Le Monde, Der Spiegel, NHK, People's Daily, Thairath, VnExpress, … | ✅ |
+| Korean sites: Naver Blog, Naver News, Daum News, Namuwiki, Tistory, Brunch, Velog, Daum Cafe (public posts) | ✅ |
+| PDFs (checked in English and Korean, split by page) | ✅ |
+| JavaScript-rendered pages | ✅ automatic when Chrome or Edge is installed |
+| Shift_JIS, EUC-JP, GBK/GB2312, Big5, EUC-KR, TIS-620, windows-1258 | ✅ |
+| Naver Cafe | ⚠️ public posts only; login/member-only posts are reported, never read with your account |
+| Sites behind bot checks: Medium, Stack Overflow, Reddit, … | ❌ not bypassed |
+| Google Search result pages | ❌ Google blocks automated access; use your agent's web search |
+| YouTube transcripts, pages behind a login, scanned PDFs, images, video | ❌ |
 
-실제 사이트 점검 결과 (`npm run check:live`, 2026-11-27) — Medium·Reddit(봇 확인)과 Google 검색은 의도적으로 거절합니다:
+Live check against real sites (`npm run check:live`, 2026-11-27). Medium and Reddit (bot checks) and Google Search are refused on purpose:
 
-![국내외 29개 사이트 점검 결과](docs/images/live.png)
+![Live check results for 29 sites](docs/images/live.png)
 
-## 보안
+## Security
 
-- **내부망 차단:** `localhost`, 사설 IP(10.x, 192.168.x 등), 링크 로컬, 클라우드 메타데이터 주소(169.254.169.254)는 거절합니다. 리다이렉트와 브라우저 안의 요청도 하나하나 다시 검사합니다. 웹페이지 속 악성 지시에 속은 Claude가 내 공유기나 사내망을 읽지 못하게 하기 위해서입니다.
-- **크기 제한:** 웹 페이지 5MB, PDF 30MB까지만 읽고, HTML·텍스트·PDF가 아닌 응답은 거절합니다.
-- **브라우저 격리:** 헤드리스 브라우저는 매번 빈 프로필로 열고 닫습니다.
-- 가져온 본문은 Claude에게 "지시가 아닌 데이터"로 표시해 넘깁니다.
+- **Private networks blocked:** `localhost`, private IPs (10.x, 192.168.x, …), link-local and cloud metadata addresses (169.254.169.254) are refused. Every redirect and every request the browser makes is checked again. This keeps a prompt-injected page from making your agent read your router or internal network.
+- **Size limits:** web pages up to 5 MB, PDFs up to 30 MB; anything other than HTML, text or PDF is refused.
+- **Browser isolation:** the headless browser opens with a fresh profile and is closed after each page.
+- Fetched content is labeled for the agent as data, not instructions.
 
-## 개발
+## Development
 
 ```bash
 npm install
-npm test                       # 오프라인 테스트 (네트워크 불필요)
-npm run check:live             # 실제 사이트 점검 (인터넷 필요)
-npm run check:live -- <URL>    # 특정 주소만 점검
-node page.mjs <URL>            # 한 페이지의 추출 결과 보기
-node page.mjs <URL> --render   # 브라우저로 읽은 결과 보기
+npm test                       # offline tests (no network)
+npm run check:live             # check real sites (needs internet)
+npm run check:live -- <URL>    # check specific addresses
+node page.mjs <URL>            # print the extraction for one page
+node page.mjs <URL> --render   # same, through the browser
 ```
 
-| 파일 | 역할 |
+| File | Role |
 |---|---|
-| `server.mjs` | MCP 서버, `fetch_page`·`fetch_pages` 도구 정의 |
-| `page.mjs` | 가져오기·보안 검사·인코딩·본문 추출(Readability → Markdown)·PDF·캐시 |
-| `browser.mjs` | 설치된 Chrome·Edge로 JavaScript 페이지 읽기 (선택) |
-| `sites.mjs` | 사이트별 규칙 (주소 바꾸기, 거절 안내) |
-| `fixtures/` | 테스트용 HTML (실제 글이 아닌, 구조만 본뜬 직접 작성한 내용) |
+| `server.mjs` | MCP server; defines `fetch_page` and `fetch_pages` |
+| `page.mjs` | Fetching, safety checks, encodings, extraction (Readability → Markdown), PDFs, cache |
+| `browser.mjs` | Reading JavaScript pages with the installed Chrome or Edge (optional) |
+| `sites.mjs` | Per-site rules |
+| `fixtures/` | Test HTML written for this project (it mimics site structure; no real articles) |
 
-### 사이트 추가하기
+### Adding a site
 
-`sites.mjs`의 `sites` 배열에 규칙을 추가하고 `test.mjs`에 테스트를 넣어 주세요.
+Add a rule to the `sites` array in `sites.mjs` and a test to `test.mjs`:
 
 ```js
 {
   name: "example",
   match: (u) => u.hostname === "example.com",
-  rewrite: (u) => u.href.replace("/view/", "/print/"),   // 본문을 담은 주소로 바꾸기
-  // refuse: "이 사이트는 ...라서 가져올 수 없습니다",    // 또는 이유를 알리고 거절
+  rewrite: (u) => u.href.replace("/view/", "/print/"),   // use the address that holds the article
+  // pick: (document) => document.querySelector("#article"), // or point at the article element
+  // refuse: "This site cannot be fetched because …",      // or explain why it cannot be read
 }
 ```
 
-테스트용 HTML이 필요하면 실제 글을 복사하지 말고, 그 사이트의 HTML 구조만 본떠 직접 쓴 내용으로 `fixtures/`에 넣어 주세요.
+If a test needs HTML, write your own that mimics the site's structure instead of copying a real article into `fixtures/`.
 
-## 라이선스
+Issues and pull requests are welcome — especially "this site doesn't work" reports with the URL.
+
+## License
 
 MIT
-
----
-
-## English
-
-**linkbrief-mcp** is an MCP server that lets Claude (or Codex, Cursor, any MCP client) read web pages and PDFs **from your own computer**, returning only the main content as Markdown with a title/source/author/date line. It is tuned for Korean sites (Naver Blog's iframe layout, Naver/Daum News, Tistory, Brunch, Velog, Daum Cafe) and legacy charsets (EUC-KR, Shift_JIS, EUC-JP, GBK, Big5, TIS-620, windows-1258), and works for pages in any language.
-
-**Token savings:** on real blog, news and wiki pages, linkbrief output is **about 95% smaller** than the raw HTML (92–99% per page). Link URLs are stripped by default (49–66% less on link-heavy pages), long pages are paged, and pages are cached for 10 minutes.
-
-**Quick start (Claude Code):** run `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp` (npx fetches it from npm; no separate install), reopen Claude Code and type `/mcp` to see `linkbrief` connected with the `fetch_page` and `fetch_pages` tools, then just ask with a link. linkbrief is a tool the agent uses: Claude decides when to call it, picks `fetch_pages` for several links, and reads long pages in parts on its own.
-
-**Install (Claude Code):** `claude mcp add linkbrief -s user -- npx -y linkbrief-mcp` (on Windows: `claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp`)
-**Claude Desktop:** add `"linkbrief": { "command": "npx", "args": ["-y", "linkbrief-mcp"] }` under `mcpServers`.
-**Codex:** add `[mcp_servers.linkbrief]` with `command = "npx"` and `args = ["-y", "linkbrief-mcp"]` to `~/.codex/config.toml`.
-
-**Tools:** `fetch_page` — `url`, `max_length` (20000), `start_index`, `include_links` (false), `render` (false). `fetch_pages` — up to 10 `urls`, `max_length_per_page` (8000), `include_links`.
-
-**PDFs:** pass the PDF's web address (right-click the link → copy link address, or copy the address bar of an open PDF). Text comes back per page (`## Page N`) with title, author, date and page count; URLs that don't end in `.pdf` work when the server sends a PDF. Local files, login-only or button-triggered downloads and scanned PDFs are not supported — attach those to Claude directly.
-
-**JavaScript pages:** when a plain request comes back empty or blocked (403/429/503), linkbrief retries in the Chrome or Edge already installed (via the optional `puppeteer-core`; no browser download), with a fresh profile and the same private-address checks on every request. Disable with `LINKBRIEF_BROWSER=off`. Bot checks such as Cloudflare are reported, never bypassed.
-
-**Safety:** refuses localhost, private/link-local networks and cloud metadata addresses (re-checked on every redirect and browser request), reads at most 5 MB per page and 30 MB per PDF, and accepts HTML/text/PDF only.
-
-**Not supported:** Google Search result pages, sites behind bot checks (e.g. Medium, Stack Overflow, Reddit), YouTube transcripts, pages behind a login (Naver Cafe posts are read only when public, otherwise reported), scanned PDFs.
-
-Development: `npm test` (offline), `npm run check:live` (real sites). Site-specific rules live in `sites.mjs`. License: MIT.

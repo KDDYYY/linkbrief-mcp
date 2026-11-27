@@ -1,7 +1,7 @@
 {
   "name": "linkbrief-mcp",
   "version": "0.1.0",
-  "description": "MCP server that lets Claude read web pages from your own PC — tuned for Korean sites (Naver blog, Daum, Tistory, Brunch) and legacy charsets (EUC-KR, Shift_JIS, GBK).",
+  "description": "MCP server that lets Claude, Codex and other agents read any link — web pages, PDFs, JavaScript pages — as clean Markdown from your own computer, with ~95% fewer tokens than raw HTML. Handles any language and legacy encodings.",
   "type": "module",
   "bin": {
     "linkbrief-mcp": "server.mjs"
@@ -23,12 +23,22 @@
   "keywords": [
     "mcp",
     "model-context-protocol",
+    "mcp-server",
     "claude",
+    "claude-code",
+    "codex",
+    "ai-agent",
     "fetch",
+    "web-fetch",
+    "pdf",
     "readability",
     "markdown",
+    "summarize",
+    "headless",
     "naver",
-    "korean"
+    "korean",
+    "japanese",
+    "chinese"
   ],
   "license": "MIT",
   "repository": {
