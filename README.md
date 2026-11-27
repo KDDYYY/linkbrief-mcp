@@ -17,7 +17,7 @@ linkbrief is an MCP server for Claude, Codex, Cursor and other agents. It fetche
 ## Why linkbrief
 
 - **~95% fewer tokens.** Menus, ads, scripts and image URLs are dropped. Ask about one thing and `find` returns only the passages that mention it.
-- **Reads what others miss.** JavaScript pages, PDFs, Word/PowerPoint/Excel, Stack Overflow, GitHub issues and PRs, whole docs sites (it follows `llms.txt`), and Asian sites in legacy encodings.
+- **Reads what others miss.** Content posted as an image (job ads, posters, notices: the images are handed to your agent, tall ones cut into readable tiles), JavaScript pages, PDFs, Word/PowerPoint/Excel, Stack Overflow, GitHub issues and PRs, whole docs sites (it follows `llms.txt`), and Asian sites in legacy encodings.
 - **Runs on your machine.** No API key, no account, no cost. Works behind corporate proxies.
 - **Safe by default.** Private networks are blocked, bot checks are never bypassed, and nothing else is ever contacted.
 
@@ -108,6 +108,7 @@ Paste the link to a PDF, `.docx`, `.pptx`, `.xlsx` or `.hwpx` — right-click a 
 | ✅ Web pages | Any language; JavaScript pages via your installed Chrome/Edge; Shift_JIS, GBK, Big5, EUC-KR and more |
 | ✅ Developer sites | GitHub issues, PRs and code files · Stack Overflow & Stack Exchange · Hacker News · arXiv · docs sites with `llms.txt` |
 | ✅ Documents | PDF, Word, PowerPoint, Excel, Hangul (.hwpx) |
+| ✅ Text in images | Job ads, posters and notices posted as an image: your agent gets the image itself (JobKorea and other job boards) |
 | ✅ Korean sites | Naver Blog, Naver/Daum News, Namuwiki, Tistory, Brunch, Velog |
 | ❌ Not supported | Pages behind a login or a bot check (Medium, Reddit), Google Search result pages, YouTube transcripts, scanned PDFs |
 
@@ -132,6 +133,7 @@ Paste the link to a PDF, `.docx`, `.pptx`, `.xlsx` or `.hwpx` — right-click a 
 | `max_length` / `start_index` | 20000 / 0 | Paging for long text; the reply says how to continue |
 | `include_links` | false | Keep link URLs (off saves tokens) |
 | `render` | false | Use the browser first (normally automatic) |
+| `images` | false | Also attach the page's main images (up to 8). Automatic when the text is too thin to be the content |
 
 **`fetch_pages`** — up to 10 `urls`, `max_length_per_page` (8000), `include_links`.
 

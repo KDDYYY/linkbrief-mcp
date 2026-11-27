@@ -17,7 +17,7 @@ linkbrief는 Claude, Codex, Cursor 등 MCP 에이전트용 서버입니다. 웹 
 ## 왜 linkbrief인가요?
 
 - **토큰 약 95% 절감.** 메뉴·광고·스크립트·이미지 주소를 빼고 본문만 넘깁니다. 하나만 물으면 `find`가 관련 부분만 돌려줍니다.
-- **다른 도구가 놓치는 것도 읽습니다.** JavaScript 페이지, PDF, Word·PowerPoint·Excel·한글(.hwpx), Stack Overflow, GitHub 이슈·PR, 문서 사이트 통째로(`llms.txt` 지원), 네이버 블로그와 EUC-KR·Shift_JIS 같은 옛 인코딩까지.
+- **다른 도구가 놓치는 것도 읽습니다.** 이미지로 올린 채용공고·포스터·공지(이미지를 에이전트에 그대로 넘기고, 긴 이미지는 읽기 좋게 잘라서), JavaScript 페이지, PDF, Word·PowerPoint·Excel·한글(.hwpx), Stack Overflow, GitHub 이슈·PR, 문서 사이트 통째로(`llms.txt` 지원), 네이버 블로그와 EUC-KR·Shift_JIS 같은 옛 인코딩까지.
 - **내 PC에서 실행됩니다.** API 키·계정·비용이 없습니다. 회사 프록시 뒤에서도 동작합니다.
 - **기본이 안전합니다.** 내부망은 막고, 봇 확인은 우회하지 않으며, 그 밖의 곳에는 접속하지 않습니다.
 
@@ -108,6 +108,7 @@ PDF, `.docx`, `.pptx`, `.xlsx`, `.hwpx` 링크를 붙여 넣으세요. 다운로
 | ✅ 웹 페이지 | 모든 언어. JavaScript 페이지는 설치된 Chrome·Edge로. Shift_JIS, GBK, Big5, EUC-KR 등 |
 | ✅ 개발자 사이트 | GitHub 이슈·PR·코드 파일 · Stack Overflow·Stack Exchange · Hacker News · arXiv · `llms.txt` 문서 사이트 |
 | ✅ 문서 | PDF, Word, PowerPoint, Excel, 한글(.hwpx) |
+| ✅ 이미지 속 글 | 이미지로 올린 채용공고·포스터·공지: 에이전트가 이미지를 직접 봅니다 (잡코리아 등 채용 사이트) |
 | ✅ 국내 사이트 | 네이버 블로그, 네이버·다음 뉴스, 나무위키, 티스토리, 브런치, 벨로그 |
 | ❌ 미지원 | 로그인·봇 확인이 필요한 페이지(Medium, Reddit), Google 검색 결과, YouTube 자막, 스캔 PDF |
 
@@ -132,6 +133,7 @@ PDF, `.docx`, `.pptx`, `.xlsx`, `.hwpx` 링크를 붙여 넣으세요. 다운로
 | `max_length` / `start_index` | 20000 / 0 | 긴 글 나눠 읽기. 이어 읽는 방법은 결과에 안내됩니다 |
 | `include_links` | false | 링크 주소 유지 (끄면 토큰 절약) |
 | `render` | false | 처음부터 브라우저로 읽기 (보통 자동) |
+| `images` | false | 본문 이미지도 함께 넘기기 (최대 8장). 글이 너무 적어 본문이 이미지인 페이지는 자동 |
 
 **`fetch_pages`** — `urls` 최대 10개, `max_length_per_page`(8000), `include_links`.
 

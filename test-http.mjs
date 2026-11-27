@@ -2,6 +2,7 @@
 // crawling, cache) and of the MCP tools, against a local HTTP server. No internet needed.
 import assert from "node:assert/strict";
 import http from "node:http";
+import zlib from "node:zlib";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { strToU8, zipSync } from "fflate";
@@ -27,6 +28,18 @@ const docx = (text) => Buffer.from(zipSync({ "word/document.xml": strToU8(`<w:do
 const eucKr = (n) => Buffer.concat([Buffer.from('<html><head><meta charset="euc-kr"><title>k</title></head><body><article><p>'), Buffer.from(Array(n).fill([0xc7, 0xd1, 0xb1, 0xdb]).flat()), Buffer.from("</p></article></body></html>")]);
 const sjis = (n) => Buffer.concat([Buffer.from('<html><head><meta http-equiv="Content-Type" content="text/html; charset=Shift_JIS"><title>j</title></head><body><article><p>'), Buffer.from(Array(n).fill([0x93, 0xfa, 0x96, 0x7b]).flat()), Buffer.from("</p></article></body></html>")]);
 
+// Minimal grayscale PNG of the given size (for image tests).
+const makePng = (w, h) => {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(Buffer.alloc((w + 1) * h, 200))), chunk("IEND", Buffer.alloc(0))]);
+};
+
 const hits = {};
 const routes = {
   "/article": (req, res) => send(res, 200, "text/html", page("Plain article", para("First.") + para("Second."), '<meta name="author" content="Ann"><meta property="article:published_time" content="2026-01-02T03:04:05Z">')),
@@ -50,6 +63,10 @@ const routes = {
   "/403": (req, res) => send(res, 403, "text/html", "<html><body>Forbidden</body></html>"),
   "/500": (req, res) => send(res, 500, "text/html", "<html><body>Oops</body></html>"),
   "/botwall": (req, res) => send(res, 200, "text/html", "<html><head><title>Just a moment...</title></head><body>checking</body></html>"),
+  "/poster": (req, res) => send(res, 200, "text/html", '<html><head><title>Hiring</title></head><body><main><p>Apply by Friday.</p><img src="/img/poster.png"><img src="/img/logo.png"><img src="http://10.0.0.1/inside.png"><img src="/img/tiny.png"></main></body></html>'),
+  "/with-image": (req, res) => send(res, 200, "text/html", page("Chart post", para("Sales went up.") + '<img src="/img/poster.png">' + para("More text."))),
+  "/img/poster.png": (req, res) => { hits.referer = req.headers.referer; send(res, 200, "image/png", makePng(400, 300)); },
+  "/img/tiny.png": (req, res) => send(res, 200, "image/png", makePng(16, 16)),
   "/short": (req, res) => send(res, 200, "text/html", "<html><body><p>tiny</p></body></html>"),
   "/robots.txt": (req, res) => send(res, 200, "text/plain", "User-agent: *\nDisallow: /docs/secret\nDisallow: /private"),
   "/private": (req, res) => routes["/article"](req, res),
@@ -222,6 +239,22 @@ delete process.env.LINKBRIEF_ROBOTS;
   assert.match(r.text, /^Read 2 pages under http:\/\/127\.0\.0\.1:\d+\/docs\/ \(robots\.txt respected\)\.\n1 more linked page under it not read/);
   r = await call("fetch_site", { url: `${base}/nope/` });
   assert.ok(r.err && /No pages could be read/.test(r.text));
+
+  // A page whose content is an image: the text comes with the image attached, private-address images are skipped.
+  let full = await client.callTool({ name: "fetch_page", arguments: { url: `${base}/poster` } });
+  assert.ok(!full.isError, full.content[0].text);
+  assert.match(full.content[0].text, /Apply by Friday\.[\s\S]*\[This page's content is mostly in images: 1 attached below, 1 not loaded\./);
+  assert.deepEqual(full.content.slice(1).map((c) => [c.type, c.mimeType]), [["image", "image/png"]]);
+  assert.equal(hits.referer, `${base}/poster`, "the page is sent as Referer");
+  full = await client.callTool({ name: "fetch_page", arguments: { url: `${base}/poster`, outline: true } });
+  assert.equal(full.content.length, 1, "no images with an outline");
+  full = await client.callTool({ name: "fetch_page", arguments: { url: `${base}/with-image` } });
+  assert.equal(full.content.length, 1, "pages with real text get no images unless asked");
+  full = await client.callTool({ name: "fetch_page", arguments: { url: `${base}/with-image`, images: true } });
+  assert.match(full.content[0].text, /\[Images from the page: 1 attached below\./);
+  assert.equal(full.content[1].type, "image");
+  r = await call("fetch_pages", { urls: [`${base}/poster`] });
+  assert.match(r.text, /content is mostly in images: call fetch_page with url=/);
 
   r = await call("fetch_page", { url: "not a url" });
   assert.ok(r.err, "schema rejects invalid URLs");

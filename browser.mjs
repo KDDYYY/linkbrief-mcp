@@ -39,23 +39,28 @@ export function renderPage(url, checkUrl) {
   return run;
 }
 
+// Cuts a tall image into JPEG tiles (each at most 1,500 px high, overlapping so no line of text is lost),
+// scaled to at most 1,568 px wide. The page loads nothing from the network.
+export function sliceImage(bytes, mimeType, { tileHeight = 1500, overlap = 60, maxTiles = 8 } = {}) {
+  const run = queue.then(() => withBrowser(async (page) => {
+    await page.setRequestInterception(true);
+    page.on("request", (req) => (req.url().startsWith("data:") ? req.continue() : req.abort()).catch(() => {}));
+    await page.setViewport({ width: 1568, height: tileHeight });
+    await page.setContent(`<style>*{margin:0}img{display:block;max-width:1568px}</style><img src="data:${mimeType};base64,${Buffer.from(bytes).toString("base64")}">`);
+    const { width, height } = await page.$eval("img", (img) => img.decode().then(() => img.getBoundingClientRect().toJSON()));
+    const tiles = [];
+    for (let y = 0; y < height && tiles.length < maxTiles; y += tileHeight - overlap) {
+      tiles.push(await page.screenshot({ type: "jpeg", quality: 85, clip: { x: 0, y, width, height: Math.min(tileHeight, height - y) }, captureBeyondViewport: true }));
+      if (y + tileHeight >= height) break;
+    }
+    return tiles;
+  }));
+  queue = run.catch(() => {});
+  return run;
+}
+
 async function renderNow(url, checkUrl) {
-  const executablePath = findBrowser();
-  if (!executablePath) throw new Error("No Chrome or Edge found for JavaScript rendering (set LINKBRIEF_BROWSER to its path).");
-  let puppeteer;
-  try { puppeteer = (await import("puppeteer-core")).default; } catch {
-    throw new Error("JavaScript rendering needs the optional puppeteer-core package (npm install puppeteer-core).");
-  }
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "linkbrief-")); // fresh profile: no cookies or logins
-  const args = ["--no-first-run", "--no-default-browser-check", "--lang=ko-KR"];
-  // Same proxy as plain requests (see page.mjs); Chrome takes NO_PROXY as a semicolon list.
-  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
-  const noProxy = process.env.NO_PROXY || process.env.no_proxy;
-  if (proxy) args.push(`--proxy-server=${proxy}`);
-  if (proxy && noProxy) args.push(`--proxy-bypass-list=${noProxy.split(",").map((s) => s.trim()).filter(Boolean).join(";")}`);
-  const browser = await puppeteer.launch({ executablePath, headless: true, userDataDir, args });
-  try {
-    const page = await browser.newPage();
+  return withBrowser(async (page) => {
     await page.setRequestInterception(true);
     const allowed = new Map(); // host -> Promise<boolean>
     page.on("request", async (req) => {
@@ -72,6 +77,26 @@ async function renderNow(url, checkUrl) {
       return null;
     });
     return { url: page.url(), status: response?.status() ?? 200, html: await page.content() };
+  });
+}
+
+async function withBrowser(fn) {
+  const executablePath = findBrowser();
+  if (!executablePath) throw new Error("No Chrome or Edge found for JavaScript rendering (set LINKBRIEF_BROWSER to its path).");
+  let puppeteer;
+  try { puppeteer = (await import("puppeteer-core")).default; } catch {
+    throw new Error("JavaScript rendering needs the optional puppeteer-core package (npm install puppeteer-core).");
+  }
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "linkbrief-")); // fresh profile: no cookies or logins
+  const args = ["--no-first-run", "--no-default-browser-check", "--lang=ko-KR"];
+  // Same proxy as plain requests (see page.mjs); Chrome takes NO_PROXY as a semicolon list.
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+  const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+  if (proxy) args.push(`--proxy-server=${proxy}`);
+  if (proxy && noProxy) args.push(`--proxy-bypass-list=${noProxy.split(",").map((s) => s.trim()).filter(Boolean).join(";")}`);
+  const browser = await puppeteer.launch({ executablePath, headless: true, userDataDir, args });
+  try {
+    return await fn(await browser.newPage());
   } finally {
     await browser.close().catch(() => {});
     // Windows can keep profile files locked for a moment after close; leftovers in tmp are harmless.

@@ -1,7 +1,21 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite, find } from "./page.mjs";
-import { findBrowser, renderPage } from "./browser.mjs";
+import zlib from "node:zlib";
+import { extract, imageSize, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite, find } from "./page.mjs";
+import { findBrowser, renderPage, sliceImage } from "./browser.mjs";
+
+// Minimal grayscale PNG of the given size (for image tests).
+const makePng = (w, h) => {
+  const chunk = (type, data) => {
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8;
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", zlib.deflateSync(Buffer.alloc((w + 1) * h, 200))), chunk("IEND", Buffer.alloc(0))]);
+};
+
 import { parseRobots, isAllowed } from "./robots.mjs";
 import { officeKind, officeToMarkdown } from "./office.mjs";
 import { zipSync, strToU8 } from "fflate";
@@ -398,6 +412,43 @@ assert.ok(!isBotWall(fixture("article-with-nav.html").replace("</body>", '<scrip
   assert.notEqual(fetchText("https://www.google.com/search?q=x").catch(() => {}), refused, "failed fetch must not be cached");
 }
 
+// Image sizes from file headers
+{
+  assert.deepEqual(imageSize(makePng(321, 123)), { width: 321, height: 123 });
+  const gif = Buffer.from("GIF89a\x40\x01\xc8\x00", "latin1");
+  assert.deepEqual(imageSize(Buffer.concat([gif, Buffer.alloc(8)])), { width: 320, height: 200 });
+  const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x04, 0x00, 0x00, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x0d, 0x14, 0x03, 0xae, 0x03]);
+  assert.deepEqual(imageSize(Buffer.concat([jpeg, Buffer.alloc(8)])), { width: 942, height: 3348 });
+  const webp = Buffer.alloc(32); webp.write("RIFF", 0, "latin1"); webp.write("WEBPVP8X", 8, "latin1"); webp.writeUIntLE(799, 24, 3); webp.writeUIntLE(599, 27, 3);
+  assert.deepEqual(imageSize(webp), { width: 800, height: 600 });
+  assert.equal(imageSize(Buffer.from("not an image at all, just text")), null);
+}
+
+// Content images, inline frames, labelled links and the <main> fallback
+{
+  const long = "Words of the article body that make it long enough to be content. ".repeat(6);
+  const p = extract(`<html><body><article><h1>T</h1><p>${long}</p>
+    <img src="/media/chart.png"><img data-lazy-src="https://cdn.example.com/lazy.jpg" src="data:image/gif;base64,R0lGOD">
+    <img src="/static/logo.png"><img src="/icons/x.svg"><img src="/media/dot.png" width="1" height="1"><img src="/media/chart.png">
+    </article></body></html>`, { url: "https://example.com/post/1" });
+  assert.deepEqual(p.images, ["https://example.com/media/chart.png", "https://cdn.example.com/lazy.jpg"], "content images: absolute, lazy src, deduped; logos, svg and 1x1 skipped");
+  assert.deepEqual(extract(`<html><body><article><p>${long}</p><img src="/a.png"></article></body></html>`).images, [], "relative images need a base URL");
+
+  const framed = extract(`<html><head><title>Job</title></head><body><nav>menu</nav><iframe srcDoc="&lt;meta charset=utf-8&gt;&lt;html&gt;&lt;body&gt;&lt;div id=jd&gt;&lt;p&gt;Duties: payroll and year-end tax settlement. ${long}&lt;/p&gt;&lt;/div&gt;&lt;/body&gt;&lt;/html&gt;"></iframe></body></html>`);
+  assert.match(framed.markdown, /Duties: payroll and year-end tax settlement/, "iframe srcdoc is read as part of the page");
+
+  const mapped = extract(`<html><body><div><img src="https://x.example/poster.jpg"><a href="https://jobs.example/apply" alt="Apply here"></a><a href="https://jobs.example/faq" aria-label="FAQ"></a></div></body></html>`, { links: true });
+  assert.match(mapped.markdown, /\[Apply here\]\(https:\/\/jobs\.example\/apply\)/, "empty image-map links keep their label");
+  assert.match(mapped.markdown, /\[FAQ\]/);
+
+  const sectioned = extract(`<html><body><header>site</header><main><section><h2>About the team</h2><p>We run payroll for the company. ${"Team text. ".repeat(10)}</p></section>
+    <section><h2>Duties</h2><ul><li>Payroll and bonuses</li><li>Year-end settlement</li><li>Social insurance filings</li></ul></section>
+    <section><h2>Requirements</h2><ul><li>3+ years of payroll</li><li>500+ employee workplace</li></ul></section>
+    <section><h2>Process</h2><ol><li>Documents</li><li>Interview</li></ol><p>${"Process details. ".repeat(20)}</p></section></main><footer>foot</footer></body></html>`);
+  assert.match(sectioned.markdown, /3\+ years of payroll/, "short Readability result falls back to <main>");
+  assert.match(sectioned.markdown, /About the team/);
+}
+
 // Browser discovery honours LINKBRIEF_BROWSER
 {
   const saved = process.env.LINKBRIEF_BROWSER;
@@ -420,6 +471,15 @@ if (findBrowser() && await import("puppeteer-core").then(() => true, () => false
     throw err;
   });
   if (r) {
+    // Tall images are cut into overlapping JPEG tiles no taller than the tile height.
+    const tiles = await sliceImage(makePng(600, 3300), "image/png", { tileHeight: 1500, overlap: 60 });
+    assert.equal(tiles.length, 3);
+    for (const t of tiles) {
+      const size = imageSize(Buffer.from(t));
+      assert.ok(size.width === 600 && size.height <= 1500, JSON.stringify(size));
+    }
+    assert.equal(imageSize(Buffer.from(tiles[2])).height, 3300 - 2 * 1440);
+    assert.equal((await sliceImage(makePng(600, 3300), "image/png", { maxTiles: 2 })).length, 2);
     assert.match(r.html, /rendered by script\. rendered by script\./);
     assert.match(r.html, /<title>blocked<\/title>/, "private request from the page must be aborted");
     // Concurrent renders are queued and both complete

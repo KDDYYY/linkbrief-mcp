@@ -183,6 +183,20 @@ export const sites = [
     },
   },
   {
+    // The job description is an inline frame (iframe srcdoc), often only an image of the posting.
+    // The page's meta description carries the summary (career, education, pay, deadline).
+    name: "jobkorea",
+    match: (u) => /(^|\.)jobkorea\.co\.kr$/.test(u.hostname) && /^\/Recruit\/GI_Read\//i.test(u.pathname),
+    pick(document) {
+      const frame = document.querySelector("[data-srcdoc]");
+      if (!frame) return null;
+      frame.querySelectorAll(".mobile").forEach((el) => el.remove()); // the same poster again for phones
+      const summary = document.querySelector('meta[name="description"]')?.getAttribute("content");
+      if (summary) frame.insertAdjacentHTML("afterbegin", `<p>${summary.replace(/[<&]/g, (c) => (c === "<" ? "&lt;" : "&amp;"))}</p>`);
+      return frame;
+    },
+  },
+  {
     // Returns a short "trouble accessing Google Search" page to non-browser clients.
     name: "google-search",
     match: (u) => /(^|\.)google\.[a-z.]+$/.test(u.hostname) && u.pathname === "/search",

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.5.0 — 2026-11-27
+
+### Added
+- **Text in images:** when a page's text is too thin to be its content (a job ad or poster posted as an image), `fetch_page` attaches the page's main images as MCP image content so the agent reads them directly. `images=true` attaches them on any page. Images go through the same private-address guard, with the page as Referer; tall images are cut into overlapping tiles with the local Chrome/Edge so small text stays readable (the model shrinks images to about 1,568 px). `fetch_pages` points to `fetch_page` for such pages.
+- **JobKorea:** job descriptions in an inline frame are read, with the posting's summary (career, education, pay, deadline).
+- Inline frames (`iframe srcdoc`) are read as part of the page; empty image-map links keep their label ("지원하기").
+
+### Fixed
+- Pages where Readability kept one block of a sectioned page (LG Careers: 1k of 3.8k characters) now use `<main>`.
+
 ## 0.4.2 — 2026-11-27
 
 - Icon: sent in the MCP server info (as a data URI, nothing fetched), in the Claude Desktop extension and in the MCP Registry entry.

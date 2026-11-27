@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
-import { findBrowser, renderPage } from "./browser.mjs";
+import { findBrowser, renderPage, sliceImage } from "./browser.mjs";
 import { officeKind, officeToMarkdown } from "./office.mjs";
 import { robotsAllows } from "./robots.mjs";
 import { normalizeUrl, pickFor, sites } from "./sites.mjs";
@@ -64,15 +64,61 @@ function unwrapMediaWikiHeadings(document) {
   return document;
 }
 
-export function extract(html, { links = true, pick } = {}) {
+// Frames given inline (iframe srcdoc: JobKorea job descriptions) are read as part of the page.
+// linkedom keeps the attribute's case (React writes srcDoc) and roots a document that starts with <meta> at it.
+function inlineFrames(document) {
+  for (const frame of document.querySelectorAll("iframe")) {
+    const src = frame.getAttribute("srcdoc") ?? frame.getAttribute("srcDoc");
+    if (!src) continue;
+    const div = document.createElement("div");
+    div.setAttribute("data-srcdoc", "");
+    div.innerHTML = parseHTML(src).document.querySelector("body")?.innerHTML ?? "";
+    frame.replaceWith(div);
+  }
+  return document;
+}
+
+// Links with no text but a label (image maps over a poster: "지원하기", "바로가기") keep the label as their text.
+function labelLinks(document) {
+  for (const a of document.querySelectorAll("a[href]")) {
+    // Only truly empty links: icon links (GitHub's "Permalink: …" over an svg) stay silent.
+    const label = !a.children.length && !a.textContent.trim() && (a.getAttribute("aria-label") || a.getAttribute("title") || a.getAttribute("alt"));
+    if (label && label.trim()) a.textContent = label.trim();
+  }
+  return document;
+}
+
+const prepare = (html) => labelLinks(inlineFrames(unwrapMediaWikiHeadings(parseHTML(html).document)));
+
+// Images in the main content, as absolute URLs: icons, logos and spacers are left out by name and size.
+const NOT_CONTENT_IMAGE = /logo|icon|sprite|blank|spacer|emoji|emoticon|avatar|profile|badge|btn|button|banner|loading|pixel|1x1/i;
+function contentImages(html, base) {
+  const urls = new Set();
+  for (const img of parseHTML(`<html><body>${html}</body></html>`).document.querySelectorAll("img")) {
+    const src = ["data-lazy-src", "data-src", "data-original", "src"].map((a) => img.getAttribute(a)).find((v) => v && !v.startsWith("data:"));
+    const small = ["width", "height"].some((a) => Number(img.getAttribute(a)) > 0 && Number(img.getAttribute(a)) < 100);
+    if (!src || small || NOT_CONTENT_IMAGE.test(src) || /\.svg(\?|$)/i.test(src)) continue;
+    try {
+      const u = new URL(src, base);
+      if (/^https?:$/.test(u.protocol)) urls.add(u.href);
+    } catch { /* relative URL without a base */ }
+  }
+  return [...urls];
+}
+
+export function extract(html, { links = true, pick, url } = {}) {
   // linkedom gives no documentElement for empty bodies or bare fragments (Amazon answers 202 with nothing).
   if (!/<html[\s>]/i.test(html)) html = `<html><body>${html}</body></html>`;
   let article = null;
-  try { article = new Readability(unwrapMediaWikiHeadings(parseHTML(html).document)).parse(); } catch { /* malformed page: use fallback */ }
-  const document = unwrapMediaWikiHeadings(parseHTML(html).document);
+  try { article = new Readability(prepare(html)).parse(); } catch { /* malformed page: use fallback */ }
+  const document = prepare(html);
   const picked = pick?.(document);
   if (picked) article = { ...article, content: picked.innerHTML, textContent: picked.textContent };
-  const useArticle = article && article.textContent.trim().length >= 200;
+  // Readability sometimes keeps one block of a sectioned page (job postings: 1k of 3.5k chars); <main> then holds it all.
+  const main = !picked && document.querySelector("main");
+  const kept = article?.textContent?.trim().length || 0;
+  if (main && kept < 1500 && main.textContent.trim().length > 2 * kept) article = { ...article, content: main.innerHTML, textContent: main.textContent };
+  const useArticle = picked || (article && article.textContent.trim().length >= 200);
   const title = (article?.title || document.title || "").trim();
   const meta = (sel) => document.querySelector(sel)?.getAttribute("content")?.trim() || "";
   // Naver's nickname meta beats Readability's guess there ("브랜드마이.. | 블로그").
@@ -87,7 +133,8 @@ export function extract(html, { links = true, pick } = {}) {
     const key = anchorKey(h.textContent);
     if (id && key && !(key in anchors)) anchors[key] = id;
   }
-  return { title, byline, siteName, published, hrefs, anchors, markdown: toMarkdown(useArticle ? article.content : document.body?.innerHTML || html, { links }) };
+  const content = useArticle ? article.content : document.body?.innerHTML || html;
+  return { title, byline, siteName, published, hrefs, anchors, images: contentImages(content, url), markdown: toMarkdown(content, { links }) };
 }
 
 // HTML fragment -> tidy Markdown (also used for API bodies, which need no Readability).
@@ -436,9 +483,9 @@ async function fetchRendered(url, links) {
   const rendered = await renderPage(url, assertPublicUrl);
   if (isBotWall(rendered.html)) throw botWallError(rendered.url);
   if (rendered.status >= 400) throw new Error(`Fetch failed in browser: HTTP ${rendered.status} for ${rendered.url}`);
-  const page = extract(rendered.html, { links, pick: pickFor(rendered.url) });
-  if (page.markdown.length < 200) throw new Error(`Page text too short even after JavaScript rendering - page may need login: ${rendered.url}`);
-  return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }), hrefs: page.hrefs, anchors: page.anchors };
+  const page = extract(rendered.html, { links, pick: pickFor(rendered.url), url: rendered.url });
+  if (page.markdown.length < 200 && !page.images.length) throw new Error(`Page text too short even after JavaScript rendering - page may need login: ${rendered.url}`);
+  return result(rendered.url, page);
 }
 
 // Plain request first; pages that block it (403/429/503) or come back empty retry in a local browser.
@@ -528,11 +575,82 @@ async function fetchPlain(raw, { links }) {
     } else {
       const html = await readBody(res);
       if (isBotWall(html)) throw botWallError(url);
-      page = extract(html, { links, pick: pickFor(url) });
-      if (page.markdown.length < 200) throw browserRetryable(`Page text too short (${page.markdown.length} chars) - page may need JavaScript or login: ${url}`, url);
+      page = extract(html, { links, pick: pickFor(url), url });
+      if (page.markdown.length < 200 && !page.images.length) throw browserRetryable(`Page text too short (${page.markdown.length} chars) - page may need JavaScript or login: ${url}`, url);
     }
-    return { url, text: formatPage({ url, ...page }), hrefs: page.hrefs, anchors: page.anchors };
+    return result(url, page);
   }
+}
+
+// imagesOnly: the text is too thin to be the content, so the content is probably in the images (posters, job ads).
+function result(url, page) {
+  const images = page.images || [];
+  return { url, text: formatPage({ url, ...page }), hrefs: page.hrefs, anchors: page.anchors, images, imagesOnly: images.length > 0 && page.markdown.length < 500 };
+}
+
+const IMAGE_TYPE = /^image\/(png|jpeg|gif|webp)$/;
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+const MAX_INLINE_IMAGE_BYTES = 3.5 * 1024 * 1024; // base64 grows it to ~4.7 MB, under the 5 MB the Claude API takes
+
+// Width and height from the file header (PNG, GIF, JPEG, WebP); null if unknown.
+export function imageSize(b) {
+  if (b.length > 24 && b.readUInt32BE(0) === 0x89504e47) return { width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+  if (b.length > 10 && b.toString("latin1", 0, 3) === "GIF") return { width: b.readUInt16LE(6), height: b.readUInt16LE(8) };
+  if (b.length > 30 && b.toString("latin1", 0, 4) === "RIFF" && b.toString("latin1", 8, 12) === "WEBP") {
+    const kind = b.toString("latin1", 12, 16);
+    if (kind === "VP8 ") return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff };
+    if (kind === "VP8L") { const v = b.readUInt32LE(21); return { width: (v & 0x3fff) + 1, height: ((v >>> 14) & 0x3fff) + 1 }; }
+    if (kind === "VP8X") return { width: b.readUIntLE(24, 3) + 1, height: b.readUIntLE(27, 3) + 1 };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    for (let i = 2; i + 9 < b.length; ) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const marker = b[i + 1];
+      if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) return { width: b.readUInt16BE(i + 7), height: b.readUInt16BE(i + 5) };
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+  }
+  return null;
+}
+
+// One image through the same private-address guard as pages; the page goes along as Referer (image CDNs check it).
+async function getImage(url, referer) {
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+    await assertPublicUrl(url);
+    const res = await get(url, null, referer && { Referer: referer });
+    const location = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && location) { url = new URL(location, url).href; continue; }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const mimeType = (res.headers.get("content-type") || "").split(";")[0].trim().toLowerCase().replace("image/jpg", "image/jpeg");
+    if (!IMAGE_TYPE.test(mimeType)) throw new Error(`not an image (${mimeType})`);
+    return { bytes: await readBytes(res, MAX_IMAGE_BYTES), mimeType };
+  }
+  throw new Error("too many redirects");
+}
+
+// The page's content images as MCP image blocks ({ data: base64, mimeType }).
+// Tall images (job ads, shop detail pages) are cut into tiles with the local browser: the model shrinks any image
+// to about 1,568 px on its long side, and small text in a 942x3348 poster would become unreadable.
+// Without a browser, images that fit are sent whole. Tiny ones (icons that slipped through) are skipped.
+export async function loadImages(urls, referer, { maxBlocks = 8 } = {}) {
+  const blocks = [];
+  let skipped = 0;
+  for (const url of urls) {
+    if (blocks.length >= maxBlocks) { skipped++; continue; }
+    try {
+      const { bytes, mimeType } = await getImage(url, referer);
+      const size = imageSize(bytes);
+      if (size && (size.width < 200 || size.height < 100)) continue;
+      const tall = size && size.height > 1600 && size.height > 1.5 * size.width;
+      if ((tall || bytes.length > MAX_INLINE_IMAGE_BYTES) && findBrowser()) {
+        const tiles = await sliceImage(bytes, mimeType, { maxTiles: maxBlocks - blocks.length });
+        blocks.push(...tiles.map((t) => ({ data: Buffer.from(t).toString("base64"), mimeType: "image/jpeg" })));
+      } else if (bytes.length <= MAX_INLINE_IMAGE_BYTES) {
+        blocks.push({ data: bytes.toString("base64"), mimeType });
+      } else skipped++;
+    } catch { skipped++; }
+  }
+  return { blocks, skipped };
 }
 
 const ASSET = /\.(png|jpe?g|gif|svg|webp|ico|css|js|mjs|json|xml|txt|zip|gz|tgz|tar|mp4|mp3|wav|woff2?|ttf|exe|dmg|msi|apk)$/i;
