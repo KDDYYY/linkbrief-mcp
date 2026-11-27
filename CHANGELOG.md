@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2 — 2026-11-27
+
+- Icon: sent in the MCP server info (as a data URI, nothing fetched), in the Claude Desktop extension and in the MCP Registry entry.
+- README: the Windows install command quotes `--` so PowerShell passes it through.
+
 ## 0.4.1 — 2026-11-27
 
 - README rewritten: shorter, with reference sections folded away. No code changes.

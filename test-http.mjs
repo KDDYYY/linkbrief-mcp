@@ -180,6 +180,7 @@ delete process.env.LINKBRIEF_ROBOTS;
     return { err: !!r.isError, text: r.content[0].text };
   };
   assert.deepEqual((await client.listTools()).tools.map((t) => t.name), ["fetch_page", "fetch_pages", "fetch_site"]);
+  assert.match(client.getServerVersion().icons[0].src, /^data:image\/png;base64,iVBORw0KGgo/);
 
   let r = await call("fetch_page", { url: `${base}/long`, outline: true });
   assert.match(r.text, /^# Long\nURL: [^\n]+\n\nOutline: 12 sections/); // the h1 is the page title, not a section

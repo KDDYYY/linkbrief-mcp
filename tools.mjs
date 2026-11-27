@@ -1,13 +1,16 @@
 // MCP tool definitions. server.mjs connects them over stdio; tests use them over an in-memory transport.
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { crawlSite, fetchText, find, outline, paginate, section } from "./page.mjs";
 
 const { version } = createRequire(import.meta.url)("./package.json");
+// Data URI so clients can show the icon without fetching anything.
+const icon = `data:image/png;base64,${readFileSync(new URL("./icon.png", import.meta.url)).toString("base64")}`;
 
 export function createServer() {
-  const server = new McpServer({ name: "linkbrief", version });
+  const server = new McpServer({ name: "linkbrief", title: "linkbrief", version, websiteUrl: "https://github.com/KDDYYY/linkbrief-mcp", icons: [{ src: icon, mimeType: "image/png", sizes: ["512x512"] }] });
 
   server.registerTool(
     "fetch_page",

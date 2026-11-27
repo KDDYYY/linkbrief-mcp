@@ -1,4 +1,4 @@
-# linkbrief-mcp
+# <img src="icon.png" width="40" align="top" alt=""> linkbrief-mcp
 
 **English** | [한국어](README.ko.md)
 
