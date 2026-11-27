@@ -108,7 +108,7 @@ Paste the link to a PDF, `.docx`, `.pptx`, `.xlsx` or `.hwpx` — right-click a 
 | ✅ Web pages | Any language; JavaScript pages via your installed Chrome/Edge; Shift_JIS, GBK, Big5, EUC-KR and more |
 | ✅ Developer sites | GitHub issues, PRs and code files · Stack Overflow & Stack Exchange · Hacker News · arXiv · docs sites with `llms.txt` |
 | ✅ Documents | PDF, Word, PowerPoint, Excel, Hangul (.hwpx) |
-| ✅ Text in images | Job ads, posters and notices posted as an image: your agent gets the image itself (JobKorea and other job boards) |
+| ✅ Text in images | Job ads, posters and notices posted as an image: your agent gets the image itself |
 | ✅ Korean sites | Naver Blog, Naver/Daum News, Namuwiki, Tistory, Brunch, Velog |
 | ❌ Not supported | Pages behind a login or a bot check (Medium, Reddit), Google Search result pages, YouTube transcripts, scanned PDFs |
 

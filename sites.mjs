@@ -183,6 +183,13 @@ export const sites = [
     },
   },
   {
+    // "Relay" views (lists, home page picks) load the posting by AJAX; the plain view page has it all inline:
+    // key facts (career, education, pay, location), the description and the positions table.
+    name: "saramin",
+    match: (u) => /(^|\.)saramin\.co\.kr$/.test(u.hostname) && /^\/zf_user\/jobs\/relay\/view$/.test(u.pathname) && u.searchParams.get("rec_idx"),
+    rewrite: (u) => `https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=${encodeURIComponent(u.searchParams.get("rec_idx"))}`,
+  },
+  {
     // The job description is an inline frame (iframe srcdoc), often only an image of the posting.
     // The page's meta description carries the summary (career, education, pay, deadline).
     name: "jobkorea",

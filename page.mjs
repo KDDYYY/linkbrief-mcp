@@ -32,7 +32,15 @@ turndown.addRule("emptyInline", {
 // Pipe table from any <table>; the first row becomes the header since Korean CMSs rarely use <th>.
 turndown.addRule("table", {
   filter: "table",
-  replacement(_content, node) {
+  replacement(content, node) {
+    // A table holding another table is page layout (Saramin): keep the inner content, already converted.
+    if (node.getElementsByTagName("table").length) return `\n\n${content}\n\n`;
+    // Line breaks and blocks inside a cell get spaces around them, so "강화</p><p>자격요건" is not glued together.
+    for (const el of Array.from(node.getElementsByTagName("*"))) {
+      if (!/^(BR|P|DIV|LI|UL|OL|DT|DD|H[1-6])$/.test(el.nodeName)) continue;
+      el.parentNode.insertBefore(node.ownerDocument.createTextNode(" "), el);
+      el.parentNode.insertBefore(node.ownerDocument.createTextNode(" "), el.nextSibling);
+    }
     const rows = Array.from(node.getElementsByTagName("tr")).map((tr) =>
       Array.from(tr.childNodes).filter((c) => c.nodeName === "TD" || c.nodeName === "TH")
         .map((c) => c.textContent.replace(ZERO_WIDTH, "").replace(/\s+/g, " ").replace(/\|/g, "\\|").trim()))

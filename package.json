@@ -1,7 +1,7 @@
 {
   "name": "linkbrief-mcp",
   "mcpName": "io.github.KDDYYY/linkbrief-mcp",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "MCP server that lets Claude, Codex and other agents read any link — web pages, PDFs, JavaScript pages — as clean Markdown from your own computer, with ~95% fewer tokens than raw HTML. Handles any language and legacy encodings.",
   "type": "module",
   "bin": {

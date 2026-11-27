@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import zlib from "node:zlib";
-import { extract, imageSize, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite, find } from "./page.mjs";
+import { extract, imageSize, toMarkdown, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite, find } from "./page.mjs";
 import { findBrowser, renderPage, sliceImage } from "./browser.mjs";
 
 // Minimal grayscale PNG of the given size (for image tests).
@@ -72,6 +72,19 @@ assert.equal(normalizeUrl("https://blog.google/"), "https://blog.google/");
   // GitHub code file -> raw; arXiv abstract -> PDF
   assert.equal(normalizeUrl("https://github.com/acme/tool/blob/main/src/a.js?plain=1#L3"), "https://raw.githubusercontent.com/acme/tool/main/src/a.js");
   assert.equal(normalizeUrl("https://arxiv.org/abs/1706.03762v7"), "https://arxiv.org/pdf/1706.03762v7");
+  // Saramin relay view (AJAX shell) -> plain view page with the posting inline; other pages untouched
+  assert.equal(normalizeUrl("https://www.saramin.co.kr/zf_user/jobs/relay/view?rec_idx=55137080&view_type=list&t_ref=main#seq=0"), "https://www.saramin.co.kr/zf_user/jobs/view?rec_idx=55137080");
+  assert.equal(normalizeUrl("https://www.saramin.co.kr/zf_user/jobs/relay/view?view_type=list"), "https://www.saramin.co.kr/zf_user/jobs/relay/view?view_type=list");
+
+  // A layout table around a data table: the data table is kept once, not flattened into one cell;
+  // blocks and line breaks inside a cell are separated by a space
+  {
+    const md = toMarkdown(`<table><tr><td><p>We are hiring</p><table><tr><td>Role</td><td>Requirements</td></tr>
+      <tr><td>Sales</td><td><p>Duties: grow revenue</p><p>Requirements: 5 years</p>English<br>Travel</td></tr></table></td></tr></table>`);
+    assert.match(md, /We are hiring/);
+    assert.equal((md.match(/\| Sales \|/g) || []).length, 1, md);
+    assert.match(md, /\| Sales \| Duties: grow revenue Requirements: 5 years English Travel \|/);
+  }
 
   // Stack Exchange: site names and question + answers
   assert.equal(stackExchangeSite("stackoverflow.com"), "stackoverflow");

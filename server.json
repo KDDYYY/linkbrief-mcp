@@ -15,12 +15,12 @@
     "url": "https://github.com/KDDYYY/linkbrief-mcp",
     "source": "github"
   },
-  "version": "0.5.1",
+  "version": "0.5.2",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "linkbrief-mcp",
-      "version": "0.5.1",
+      "version": "0.5.2",
       "transport": {
         "type": "stdio"
       }
