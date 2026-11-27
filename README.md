@@ -17,7 +17,7 @@ Give your agent a link and ask; linkbrief brings back just the main content with
 ## Why linkbrief
 
 - **~95% fewer tokens.** Most of a page's HTML is menus, ads, scripts and image URLs. linkbrief keeps the article. ([measured](#token-savings))
-- **Read only the part you need.** Ask for an outline first — headings, sizes and a one-line preview — then read just the section that matters. On a long Wikipedia article that is 87% less than reading it all.
+- **Read only the part you need.** Ask a question with `find` and get just the passages that mention it (76–88% less than the whole page), or look at the outline first and read one section, with a link to cite it.
 - **Built for developers.** GitHub issues and PRs come with every comment and the changed files; Stack Overflow questions with their top answers; Hacker News threads in full; arXiv abstracts open the paper. Point it at a docs site and it reads the section for you (`fetch_site`).
 - **Documents, not just pages.** PDFs page by page, and Word, PowerPoint, Excel and Hangul (.hwpx) files from a link.
 - **Reads what other fetchers miss.** Pages that render with JavaScript are retried in the Chrome or Edge you already have. PDFs come back as text, page by page. Requests come from your machine, so sites that block cloud fetchers still answer.
@@ -86,6 +86,7 @@ Where the savings come from:
 | **Main content only** (Mozilla Readability) | Drops menus, ads, comments, footers and scripts — most of the saving |
 | **No images or icons** | Image URLs alone can double a page's size |
 | **Link URLs removed** (default) | Keeps the link text only: 49–66% less on link-heavy pages. Keep them with `include_links` |
+| **Find passages** | `find` returns only the blocks that mention your words, with context: 76–88% less than the whole page on long documents |
 | **Outline first, then one section** | `outline` returns the headings with sizes; `section` returns just one part. 82–91% less than the whole page on long documents (below) |
 | **Paging** | Up to 20,000 characters per call; the agent asks for more with `start_index` only when needed |
 | **Per-page cap for many links** | `fetch_pages` returns up to 8,000 characters per page by default |
@@ -174,7 +175,7 @@ Talk to your agent as usual and include the link. It calls linkbrief by itself.
 
 > What is the accepted fix here, and why does it work? https://stackoverflow.com/questions/11227809
 
-**A whole docs section** — `fetch_site` follows links under the start page's folder (up to 30 pages, robots.txt respected).
+**A whole docs section** — `fetch_site` follows links under the start page's folder (up to 30 pages, robots.txt respected). If the site publishes an `llms.txt` index for language models (Stripe, Vercel, Anthropic and many docs sites do), it is used first.
 
 > Read the Python tutorial and give me a one-page cheat sheet: https://docs.python.org/3/tutorial/index.html
 
@@ -196,7 +197,11 @@ Talk to your agent as usual and include the link. It calls linkbrief by itself.
 
 > Summarize this and end with the source (site, author, date): https://…
 
-**Only the part you need** — the agent looks at the outline, then reads one section. You can also ask for it directly:
+**Just the answer** — for a question about a long page, the agent searches it with `find` and reads only the passages that mention your terms:
+
+> What does this article say about hallucination? https://en.wikipedia.org/wiki/Large_language_model
+
+**Only the part you need** — the agent looks at the outline, then reads one section. Each section comes with a link you can cite (`…/Large_language_model#History`). You can also ask for it directly:
 
 > Show me the outline of this page first, then read only the section on training: https://en.wikipedia.org/wiki/Large_language_model
 
@@ -270,6 +275,7 @@ When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbri
 | `render` | false | Use the browser from the start. Rarely needed: empty or blocked pages fall back automatically |
 | `outline` | false | Return only the headings, with each section's size and first line |
 | `section` | — | Return one section and its subsections: an outline number (`"#3"`) or heading text (`"History"`, `"Page 4"`) |
+| `find` | — | Return only passages that mention these words or `"quoted phrases"`, with context. Combine with `section` to search one part |
 
 ### `fetch_site` — read a docs site or section
 
@@ -280,7 +286,7 @@ When a plain request comes back empty or blocked (HTTP 403, 429 or 503), linkbri
 | `max_length_per_page` | 4000 | Maximum characters per page (500–20,000) |
 | `include_links` | false | Keep link URLs |
 
-Pages are read breadth-first with a pause between requests, and robots.txt is always honoured.
+Pages are read breadth-first with a pause between requests, and robots.txt is always honoured. When the site has `/llms.txt`, it is read first and the pages it lists come next.
 
 ### `fetch_pages` — read several pages
 
@@ -323,7 +329,7 @@ Main content as Markdown
 | News: BBC, The Verge, Le Monde, Der Spiegel, NHK, People's Daily, Thairath, VnExpress, … | ✅ |
 | Korean sites: Naver Blog, Naver News, Daum News, Namuwiki, Tistory, Brunch, Velog | ✅ |
 | PDFs (checked in English and Korean, split by page) | ✅ |
-| Word (.docx), PowerPoint (.pptx), Excel (.xlsx, first 200 rows per sheet), Hangul (.hwpx) | ✅ (Excel dates appear as serial numbers) |
+| Word (.docx), PowerPoint (.pptx), Excel (.xlsx, first 200 rows per sheet), Hangul (.hwpx) | ✅ |
 | Old binary Hangul (.hwp) | ❌ save as .hwpx or PDF |
 | JavaScript-rendered pages | ✅ automatic when Chrome or Edge is installed |
 | Shift_JIS, EUC-JP, GBK/GB2312, Big5, EUC-KR, TIS-620, windows-1258 | ✅ |
@@ -333,7 +339,7 @@ Main content as Markdown
 
 Live check against real sites (`npm run check:live`, 2026-11-27). Medium and Reddit (bot checks) and Google Search are refused on purpose:
 
-![Live check results for 36 sites](docs/images/live.png)
+![Live check results for 38 sites](docs/images/live.png)
 
 ## Settings
 
@@ -341,6 +347,7 @@ All optional, as environment variables (in Claude Desktop/Codex config under `en
 
 | Variable | Effect |
 |---|---|
+| `HTTPS_PROXY` / `HTTP_PROXY`, `NO_PROXY` | Corporate proxy: requests (and the browser fallback) go through it; `NO_PROXY` hosts go direct |
 | `GITHUB_TOKEN` | Raises GitHub API limits from 60 to 5,000 requests/hour for issues and PRs |
 | `LINKBRIEF_ROBOTS=always` | Also honour robots.txt for single links (`fetch_site` always does) |
 | `LINKBRIEF_BROWSER=off` / `=<path>` | Disable the browser fallback, or use a specific Chrome/Edge |
@@ -374,7 +381,7 @@ node page.mjs <URL> --render   # same, through the browser
 | `robots.mjs` | robots.txt parsing |
 | `manifest.json`, `server.json` | Claude Desktop extension and MCP Registry metadata (`npm run build:mcpb` builds `dist/linkbrief.mcpb`) |
 | `sites.mjs` | Per-site rules |
-| `test.mjs`, `test-http.mjs`, `test-fuzz.mjs` | Unit tests; the full fetch path and MCP tools against a local HTTP server; seeded random-input checks |
+| `test.mjs`, `test-http.mjs`, `test-proxy.mjs`, `test-fuzz.mjs` | Unit tests; the full fetch path and MCP tools against a local HTTP server; proxy support against a local proxy; seeded random-input checks |
 | `fixtures/` | Test HTML written for this project (it mimics site structure; no real articles) |
 
 ### Adding a site

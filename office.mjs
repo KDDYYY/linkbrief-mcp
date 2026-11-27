@@ -22,7 +22,7 @@ export function officeKind(type, url) {
 }
 
 const MAX_UNPACKED = 60 * 1024 * 1024;
-const WANTED = /^(word\/document\.xml|ppt\/slides\/slide\d+\.xml|xl\/(workbook\.xml|sharedStrings\.xml|worksheets\/sheet\d+\.xml|_rels\/workbook\.xml\.rels)|docProps\/core\.xml|Contents\/section\d+\.xml)$/;
+const WANTED = /^(word\/document\.xml|ppt\/slides\/slide\d+\.xml|xl\/(workbook\.xml|sharedStrings\.xml|styles\.xml|worksheets\/sheet\d+\.xml|_rels\/workbook\.xml\.rels)|docProps\/core\.xml|Contents\/section\d+\.xml)$/;
 
 // Unpacks only the XML parts we read, refusing archives that declare more than MAX_UNPACKED.
 // shortcut: trusts the sizes declared in the ZIP headers; switch to streaming inflate with a running cap if hostile files become a concern.
@@ -81,7 +81,35 @@ function pptx(files) {
 
 const MAX_ROWS = 200;
 const MAX_COLS = 50;
+
+// Excel stores dates as day counts; a cell whose number format is a date or time is shown as ISO text.
+// Built-in format ids for dates/times (including the CJK locale ones 27-36 and 50-58).
+const BUILTIN_DATE = new Set([14, 15, 16, 17, 22, 27, 28, 29, 30, 31, 34, 35, 36, 50, 51, 52, 53, 54, 57, 58]);
+const BUILTIN_TIME = new Set([18, 19, 20, 21, 32, 33, 45, 46, 47, 55, 56]);
+// Per cell style index (the "s" attribute): "date", "datetime", "time" or undefined.
+function dateStyles(stylesXml) {
+  const custom = Object.fromEntries([...stylesXml.matchAll(/<numFmt [^>]*numFmtId="(\d+)"[^>]*formatCode="([^"]*)"/g)].map(([, id, code]) => [id, unxml(code)]));
+  const xfs = /<cellXfs[^>]*>([\s\S]*?)<\/cellXfs>/.exec(stylesXml)?.[1] || "";
+  return [...xfs.matchAll(/<xf [^>]*?numFmtId="(\d+)"/g)].map(([, id]) => {
+    if (BUILTIN_DATE.has(Number(id))) return Number(id) === 22 ? "datetime" : "date";
+    if (BUILTIN_TIME.has(Number(id))) return "time";
+    const code = (custom[id] || "").replace(/"[^"]*"|\[[^\]]*\]|\\./g, ""); // drop literals, colours, locales
+    if (/[dy]/i.test(code)) return /h/i.test(code) ? "datetime" : "date";
+    if (/h/i.test(code)) return "time";
+    return undefined;
+  });
+}
+// shortcut: ignores Excel's 1900 leap-year bug, so serials before 1900-03-01 are one day off; such dates are rare in practice.
+function excelDate(value, kind, date1904) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return value;
+  const iso = new Date(Date.UTC(1899, 11, 30) + Math.round((n + (date1904 ? 1462 : 0)) * 86400000)).toISOString();
+  return kind === "time" ? iso.slice(11, 16) : kind === "datetime" ? `${iso.slice(0, 10)} ${iso.slice(11, 16)}` : iso.slice(0, 10);
+}
+
 function xlsx(files) {
+  const styles = dateStyles(files["xl/styles.xml"] || "");
+  const date1904 = /date1904="(1|true)"/.test(files["xl/workbook.xml"] || "");
   const shared = [...(files["xl/sharedStrings.xml"] || "").matchAll(/<si>([\s\S]*?)<\/si>/g)].map(([, si]) => texts(si, "t"));
   const rels = Object.fromEntries([...(files["xl/_rels/workbook.xml.rels"] || "").matchAll(/<Relationship [^>]*Id="([^"]+)"[^>]*Target="([^"]+)"/g)].map(([, id, t]) => [id, `xl/${t.replace(/^\/?xl\//, "")}`]));
   const sheets = [...(files["xl/workbook.xml"] || "").matchAll(/<sheet [^>]*name="([^"]+)"[^>]*r:id="([^"]+)"/g)].map(([, name, id]) => ({ name: unxml(name), file: rels[id] }));
@@ -93,7 +121,10 @@ function xlsx(files) {
         const ref = /r="([A-Z]+)\d+"/.exec(attrs)?.[1];
         const kind = /t="(\w+)"/.exec(attrs)?.[1];
         const v = /<v>([^<]*)<\/v>/.exec(inner || "")?.[1];
-        values[ref ? col(ref) : values.length] = kind === "s" ? shared[Number(v)] ?? "" : kind === "inlineStr" ? texts(inner || "", "t") : unxml(v ?? "");
+        const dateKind = !kind || kind === "n" ? styles[Number(/\bs="(\d+)"/.exec(attrs)?.[1])] : undefined;
+        values[ref ? col(ref) : values.length] = kind === "s" ? shared[Number(v)] ?? ""
+          : kind === "inlineStr" ? texts(inner || "", "t")
+            : dateKind && v != null ? excelDate(v, dateKind, date1904) : unxml(v ?? "");
       }
       return Array.from(values.slice(0, MAX_COLS), (x) => x ?? "");
     }).filter((r) => r.some(Boolean));

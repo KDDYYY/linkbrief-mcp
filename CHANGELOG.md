@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.4.0 — 2026-11-27
+
+### Added
+- **`find`:** `fetch_page` returns only the passages that mention given words or "quoted phrases", with one block of context and the headings they sit under; combine with `section`. 76–88% less than the whole page on long documents. Long lists are matched line by line.
+- **llms.txt:** `fetch_site` reads a site's `/llms.txt` index first and the pages it lists next; `text/markdown` responses (`.md` docs) are read as Markdown.
+- **Corporate proxies:** `HTTPS_PROXY` / `HTTP_PROXY` with `NO_PROXY`, for plain requests and the browser fallback. Behind a proxy, names the PC cannot resolve are left to the proxy unless they look internal.
+- **Citable section links:** outline lists each section's HTML anchor and `section` replies include `Section link: page#anchor`.
+
+### Fixed
+- Excel dates and times are shown as ISO dates instead of serial numbers (built-in and custom formats, 1904 date system).
+- A 1-character page window on an emoji no longer stalls paging (found by fuzzing).
+
+### Tests
+- `test-proxy.mjs` against a local CONNECT proxy; llms.txt, Markdown docs, `find` and anchors in the local-server and fuzz tests. 12,000 fuzz rounds; line coverage 96.7%.
+
 ## 0.3.0 — 2026-11-27
 
 ### Added

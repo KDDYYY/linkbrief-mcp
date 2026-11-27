@@ -2,9 +2,9 @@
   "manifest_version": "0.3",
   "name": "linkbrief",
   "display_name": "linkbrief",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Read any link — web pages, PDFs, Office files, JavaScript pages — as clean Markdown, with ~95% fewer tokens.",
-  "long_description": "linkbrief fetches pages from your own computer and returns only the main content as Markdown with title, source, author and date. It can show an outline first and read one section, read several links or a docs site at once, and reads GitHub issues and PRs, Stack Overflow, Hacker News, arXiv, PDFs and Word/PowerPoint/Excel/Hangul (hwpx) files. Private network addresses are blocked and bot checks are never bypassed.",
+  "long_description": "linkbrief fetches pages from your own computer and returns only the main content as Markdown with title, source, author and date. It can find just the passages that mention your keywords, show an outline and read one section with a citable link, follow a site's llms.txt, read several links or a docs site at once, and reads GitHub issues and PRs, Stack Overflow, Hacker News, arXiv, PDFs and Word/PowerPoint/Excel/Hangul (hwpx) files. Private network addresses are blocked and bot checks are never bypassed.",
   "author": {
     "name": "KDDYYY",
     "url": "https://github.com/KDDYYY"
@@ -15,22 +15,39 @@
     "url": "https://github.com/KDDYYY/linkbrief-mcp.git"
   },
   "license": "MIT",
-  "keywords": ["fetch", "web", "pdf", "markdown", "summarize"],
+  "keywords": [
+    "fetch",
+    "web",
+    "pdf",
+    "markdown",
+    "summarize"
+  ],
   "server": {
     "type": "node",
     "entry_point": "server.mjs",
     "mcp_config": {
       "command": "node",
-      "args": ["${__dirname}/server.mjs"],
+      "args": [
+        "${__dirname}/server.mjs"
+      ],
       "env": {
         "GITHUB_TOKEN": "${user_config.github_token}"
       }
     }
   },
   "tools": [
-    { "name": "fetch_page", "description": "Read one web page or document as Markdown, or just its outline or one section" },
-    { "name": "fetch_pages", "description": "Read up to 10 links at once" },
-    { "name": "fetch_site", "description": "Read several pages of a docs site or blog section" }
+    {
+      "name": "fetch_page",
+      "description": "Read one web page or document as Markdown, or only the passages that mention keywords, its outline or one section"
+    },
+    {
+      "name": "fetch_pages",
+      "description": "Read up to 10 links at once"
+    },
+    {
+      "name": "fetch_site",
+      "description": "Read several pages of a docs site or blog section"
+    }
   ],
   "user_config": {
     "github_token": {
@@ -42,7 +59,11 @@
     }
   },
   "compatibility": {
-    "platforms": ["darwin", "win32", "linux"],
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
     "runtimes": {
       "node": ">=22.12.0"
     }

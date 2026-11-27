@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { strToU8, zipSync } from "fflate";
 import { officeToMarkdown } from "./office.mjs";
-import { extract, outline, paginate, section, tidyMarkdown } from "./page.mjs";
+import { extract, find, outline, paginate, section, tidyMarkdown } from "./page.mjs";
 import { isAllowed, parseRobots } from "./robots.mjs";
 
 let seed = Number(process.argv[2] ?? 20261127);
@@ -41,6 +41,9 @@ for (let i = 0; i < rounds; i++) {
   const hit = /- (#\d+) (.+) \(\d[\d,]* chars\)/.exec(outline(md));
   if (hit) timed("section", () => section(md, hit[2] === "(untitled)" ? hit[1] : hit[2]));
   try { section(md, `#${1 + Math.floor(rnd() * 5)}`); } catch (e) { assert.match(e.message, /No section|no headings/); }
+  // find with arbitrary queries: a reply or the "give words" error, never a crash or hang
+  const query = many(4, () => pick([...WORDS, '"', " ", "##"]));
+  try { timed("find", () => find(md, query)); } catch (e) { assert.match(e.message, /words or a "quoted phrase"/); }
 
   // Paging is lossless: the parts, notes removed, rebuild the text exactly
   const text = randMd() + "😀".repeat(Math.floor(rnd() * 5)) + randMd();
@@ -64,7 +67,8 @@ for (let i = 0; i < rounds; i++) {
   const kind = pick(["docx", "pptx", "xlsx", "hwpx"]);
   try { officeToMarkdown(Buffer.from(Array.from({ length: Math.floor(rnd() * 200) }, () => Math.floor(rnd() * 256))), kind); } catch (e) { assert.ok(e instanceof Error); }
   const junkXml = many(30, () => pick(["<w:p>", "</w:p>", "<w:t>", "</w:t>", "<a:p>", "<a:t>", "<hp:p>", "<hp:t>", "<row r=\"1\">", "<c r=\"A1\" t=\"s\"><v>9</v></c>", "</row>", "<w:tbl>", "</w:tbl>", ...WORDS]));
-  const zip = Buffer.from(zipSync({ "word/document.xml": strToU8(junkXml), "ppt/slides/slide1.xml": strToU8(junkXml), "xl/workbook.xml": strToU8(junkXml), "Contents/section0.xml": strToU8(junkXml) }));
+  const junkStyles = many(10, () => pick(["<cellXfs>", "</cellXfs>", '<xf numFmtId="14"/>', '<xf numFmtId="164"/>', '<numFmt numFmtId="164" formatCode="yyyy"/>', ...WORDS]));
+  const zip = Buffer.from(zipSync({ "word/document.xml": strToU8(junkXml), "ppt/slides/slide1.xml": strToU8(junkXml), "xl/workbook.xml": strToU8(junkXml), "xl/styles.xml": strToU8(junkStyles), "Contents/section0.xml": strToU8(junkXml) }));
   timed("office", () => officeToMarkdown(zip, kind));
 }
 

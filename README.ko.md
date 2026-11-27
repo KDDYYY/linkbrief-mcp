@@ -13,7 +13,7 @@ Claude가 **내 PC에서 직접** 웹 페이지, PDF, Office 문서를 읽게 �
 ## 왜 필요한가요?
 
 - **토큰을 95% 아낍니다.** 웹 페이지 HTML의 대부분은 메뉴·광고·스크립트·이미지 주소입니다. linkbrief는 본문만 남겨 넘깁니다. ([측정 결과](#토큰-절감-효과))
-- **필요한 부분만 읽습니다.** 먼저 목차(제목·분량·첫 문장)를 보고, 필요한 문단만 골라 읽습니다. 긴 위키백과 문서라면 전체를 읽을 때보다 87% 적습니다.
+- **필요한 부분만 읽습니다.** `find`로 질문과 관련된 부분만 찾아 읽거나(전체 대비 76~88% 감소), 목차를 보고 필요한 문단만 골라 읽습니다. 문단마다 인용할 수 있는 바로가기 링크가 붙습니다.
 - **개발자용 사이트를 제대로 읽습니다.** GitHub 이슈·PR은 댓글 전체와 변경 파일까지, Stack Overflow는 질문과 추천 답변, Hacker News는 댓글 트리 전체, arXiv 요약 페이지는 논문 본문으로 읽습니다. 문서 사이트는 한 섹션을 통째로 읽어 줍니다 (`fetch_site`).
 - **문서 파일도 읽습니다.** PDF는 쪽별로, Word·PowerPoint·Excel·한글(.hwpx) 파일도 링크만 주면 됩니다.
 - **막힌 사이트도 읽습니다.** Claude의 기본 웹 가져오기는 일부 사이트(예: `blog.naver.com`)가 막혀 있습니다. linkbrief는 **사용자 PC에서 일반 브라우저처럼** 요청합니다.
@@ -82,6 +82,7 @@ Claude가 읽고 비교·요약해서 답변
 | **본문만 추출** (Mozilla Readability) | 메뉴·광고·댓글·푸터·스크립트 제거 — 절감의 대부분 |
 | **이미지·아이콘 제거** | 이미지 주소만으로 분량이 2배가 되는 페이지도 있습니다 |
 | **링크 주소 제거** (기본값) | 링크 글자만 남김. 링크가 많은 문서에서 49~66% 추가 감소. 필요하면 `include_links`로 유지 |
+| **관련 부분만 찾기** | `find`는 검색어가 든 블록과 그 앞뒤만 돌려줍니다. 긴 문서에서 전체 대비 76~88% 감소 |
 | **목차 먼저, 한 문단만** | `outline`은 제목과 분량만, `section`은 한 문단만 돌려줍니다. 긴 문서에서 전체 대비 82~91% 감소 (아래 표) |
 | **나눠 읽기** | 한 번에 2만 자까지만 넘기고, 더 필요할 때만 `start_index`로 이어 읽음 |
 | **여러 링크는 페이지당 상한** | `fetch_pages`는 기본 페이지당 8천 자 |
@@ -170,7 +171,7 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 
 > 여기서 채택된 해결책이 뭐고 왜 되는지 설명해 줘: https://stackoverflow.com/questions/11227809
 
-**문서 사이트 한 섹션 통째로** — `fetch_site`가 시작 페이지와 같은 폴더 아래 링크를 따라 읽습니다 (최대 30쪽, robots.txt 준수).
+**문서 사이트 한 섹션 통째로** — `fetch_site`가 시작 페이지와 같은 폴더 아래 링크를 따라 읽습니다 (최대 30쪽, robots.txt 준수). 사이트가 AI용 목차 `llms.txt`를 제공하면(Stripe, Vercel, Anthropic 등 많은 문서 사이트) 그것부터 씁니다.
 
 > 파이썬 튜토리얼 읽고 한 장짜리 요약표 만들어 줘: https://docs.python.org/3/tutorial/index.html
 
@@ -192,7 +193,11 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 
 > 요약 끝에 출처(사이트, 작성자, 날짜)도 적어 줘: https://...
 
-**필요한 부분만** — 에이전트가 목차를 보고 필요한 문단만 골라 읽습니다. 직접 부탁해도 됩니다:
+**질문에 필요한 부분만** — 긴 문서에 대한 질문이면 에이전트가 `find`로 관련 부분만 찾아 읽습니다:
+
+> 이 문서에서 유산균 얘기만 정리해 줘: https://namu.wiki/w/김치
+
+**필요한 부분만** — 에이전트가 목차를 보고 필요한 문단만 골라 읽습니다. 문단마다 인용용 링크(`…#s-2`)가 붙습니다. 직접 부탁해도 됩니다:
 
 > 이 문서 목차부터 보여 주고, 역사 부분만 읽어서 정리해 줘: https://namu.wiki/w/김치
 
@@ -268,6 +273,7 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 | `render` | false | 처음부터 브라우저로 읽기. 보통은 필요 없습니다 (자동 대체됨) |
 | `outline` | false | 제목 목차만 돌려주기 (각 문단의 분량과 첫 문장 포함) |
 | `section` | — | 한 문단(하위 문단 포함)만 돌려주기: 목차 번호(`"#3"`)나 제목(`"역사"`, `"Page 4"`) |
+| `find` | — | 이 단어나 `"따옴표 구절"`이 나오는 부분만 앞뒤 문맥과 함께 돌려주기. `section`과 같이 쓰면 그 문단 안에서만 찾음 |
 
 ### `fetch_site` — 문서 사이트·섹션 읽기
 
@@ -278,7 +284,7 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 | `max_length_per_page` | 4000 | 쪽당 최대 글자 수 (500~20,000) |
 | `include_links` | false | 링크 주소까지 유지할지 |
 
-가까운 링크부터 차례로 읽고, 요청 사이에 쉬며, robots.txt는 항상 지킵니다.
+가까운 링크부터 차례로 읽고, 요청 사이에 쉬며, robots.txt는 항상 지킵니다. 사이트에 `/llms.txt`가 있으면 그것을 먼저 읽고, 거기 나열된 문서를 다음 순서로 읽습니다.
 
 ### `fetch_pages` — 여러 페이지 한 번에
 
@@ -308,7 +314,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 | Hacker News 글·댓글, arXiv (요약 페이지 → 논문 본문) | ✅ |
 | BBC, 르몽드, 슈피겔, NHK, 인민망, 타이랏, VnExpress 등 해외 뉴스 | ✅ |
 | PDF (영어·한국어 확인, 페이지별 구분) | ✅ |
-| Word(.docx), PowerPoint(.pptx), Excel(.xlsx, 시트당 처음 200행), 한글(.hwpx) | ✅ (Excel 날짜는 일련번호로 나옴) |
+| Word(.docx), PowerPoint(.pptx), Excel(.xlsx, 시트당 처음 200행), 한글(.hwpx) | ✅ |
 | 예전 한글 형식(.hwp) | ❌ .hwpx나 PDF로 저장해서 쓰세요 |
 | JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
 | EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
@@ -318,7 +324,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 
 실제 사이트 점검 결과 (`npm run check:live`, 2026-11-27) — Medium·Reddit(봇 확인)과 Google 검색은 의도적으로 거절합니다:
 
-![국내외 36개 사이트 점검 결과](docs/images/live.png)
+![국내외 38개 사이트 점검 결과](docs/images/live.png)
 
 ## 설정
 
@@ -326,6 +332,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 
 | 변수 | 효과 |
 |---|---|
+| `HTTPS_PROXY` / `HTTP_PROXY`, `NO_PROXY` | 회사 프록시: 요청과 브라우저 재시도가 프록시를 거침. `NO_PROXY`의 주소는 직접 연결 |
 | `GITHUB_TOKEN` | GitHub 이슈·PR을 읽는 API 한도를 시간당 60회 → 5,000회로 |
 | `LINKBRIEF_ROBOTS=always` | 링크 하나를 읽을 때도 robots.txt 지키기 (`fetch_site`는 항상 지킴) |
 | `LINKBRIEF_BROWSER=off` / `=<경로>` | 브라우저 재시도 끄기, 또는 특정 Chrome·Edge 지정 |
@@ -359,7 +366,7 @@ node page.mjs <URL> --render   # 브라우저로 읽은 결과 보기
 | `robots.mjs` | robots.txt 해석 |
 | `manifest.json`, `server.json` | Claude Desktop 확장과 MCP Registry 정보 (`npm run build:mcpb`로 `dist/linkbrief.mcpb` 생성) |
 | `sites.mjs` | 사이트별 규칙 (주소 바꾸기, 거절 안내) |
-| `test.mjs`, `test-http.mjs`, `test-fuzz.mjs` | 단위 테스트, 로컬 서버로 실제 요청 흐름과 MCP 도구 전체 검사, 고정 시드 무작위 입력 검사 |
+| `test.mjs`, `test-http.mjs`, `test-proxy.mjs`, `test-fuzz.mjs` | 단위 테스트, 로컬 서버로 실제 요청 흐름과 MCP 도구 전체 검사, 로컬 프록시로 프록시 지원 검사, 고정 시드 무작위 입력 검사 |
 | `fixtures/` | 테스트용 HTML (실제 글이 아닌, 구조만 본뜬 직접 작성한 내용) |
 
 ### 사이트 추가하기

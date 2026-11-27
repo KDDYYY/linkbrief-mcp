@@ -47,7 +47,13 @@ async function renderNow(url, checkUrl) {
     throw new Error("JavaScript rendering needs the optional puppeteer-core package (npm install puppeteer-core).");
   }
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "linkbrief-")); // fresh profile: no cookies or logins
-  const browser = await puppeteer.launch({ executablePath, headless: true, userDataDir, args: ["--no-first-run", "--no-default-browser-check", "--lang=ko-KR"] });
+  const args = ["--no-first-run", "--no-default-browser-check", "--lang=ko-KR"];
+  // Same proxy as plain requests (see page.mjs); Chrome takes NO_PROXY as a semicolon list.
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy;
+  const noProxy = process.env.NO_PROXY || process.env.no_proxy;
+  if (proxy) args.push(`--proxy-server=${proxy}`);
+  if (proxy && noProxy) args.push(`--proxy-bypass-list=${noProxy.split(",").map((s) => s.trim()).filter(Boolean).join(";")}`);
+  const browser = await puppeteer.launch({ executablePath, headless: true, userDataDir, args });
   try {
     const page = await browser.newPage();
     await page.setRequestInterception(true);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite } from "./page.mjs";
+import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite, find } from "./page.mjs";
 import { findBrowser, renderPage } from "./browser.mjs";
 import { parseRobots, isAllowed } from "./robots.mjs";
 import { officeKind, officeToMarkdown } from "./office.mjs";
@@ -186,6 +186,8 @@ assert.ok(!isBlockedIp("2001:4860:4860::8888"), "ordinary public IPv6 stays allo
   const first = paginate(text, 0, 10);
   assert.ok(first.startsWith("a".repeat(9) + "\n\n[Truncated: showing characters 0-9 "), first);
   assert.ok(paginate(text, 9, 10).startsWith("😀"));
+  // A 1-character window on an emoji takes the whole pair instead of stalling (found by test-fuzz.mjs, seed 42)
+  assert.match(paginate(text, 9, 1), /^😀\n\n\[Truncated: showing characters 9-11 of \d+\. Call fetch_page again with start_index=11/);
 }
 
 // Header fields with line breaks stay on one line; ~~~ fences hide headings
@@ -193,6 +195,57 @@ assert.ok(!isBlockedIp("2001:4860:4860::8888"), "ordinary public IPv6 stays allo
   const t = formatPage({ url: "https://x.example/", title: "Two\n\nlines", byline: "A\nB", markdown: "## Real\n\n~~~\n## not a heading\n~~~\n\ntext" });
   assert.match(t, /^# Two lines\nAuthor: A B \| URL: https:\/\/x\.example\/\n\n## Real/);
   assert.match(outline(t), /Outline: 1 sections/);
+}
+
+// find: words and phrases, context, heading path, big blocks split by line, no-match and empty queries
+{
+  const big = Array.from({ length: 60 }, (_, i) => `- reference ${i}${i === 41 ? " about pricing tiers" : ""} ${"x".repeat(20)}`).join("\n");
+  const t = formatPage({ url: "https://x.example/doc", title: "Doc", markdown: [
+    "Intro line.", "## Setup", "Install it.", "Then configure the API key here.", "## Pricing", "### Plans", "Free and Pro plans.", "Pro costs money.",
+    "```\npricing = 1  # inside code\n\nstill code\n```", "## References", big,
+  ].join("\n\n") });
+  const r = find(t, 'pricing "api key"');
+  assert.match(r, /^# Doc\nURL: https:\/\/x\.example\/doc\n\nFound \d+ blocks mentioning "pricing" or "api key"\./);
+  assert.match(r, /--- in: Setup ---\nInstall it\.\n\nThen configure the API key here\./, "context before the hit");
+  assert.match(r, /## Pricing\n\n### Plans\n\nFree and Pro plans\./, "a matching heading brings the text under it");
+  assert.match(r, /```\npricing = 1  # inside code\n\nstill code\n```/, "a code block stays whole");
+  assert.match(r, /--- in: References ---\n- reference 40 x+\n- reference 41 about pricing tiers/, "a long list is cut to the matching line and its neighbours");
+  assert.ok(!r.includes("reference 10 "), "the rest of the long list is left out");
+  assert.match(find(t, "zebra"), /No passage mentions "zebra"/);
+  assert.throws(() => find(t, "   "), /words or a "quoted phrase"/);
+  const many = formatPage({ url: "https://x.example/", markdown: Array.from({ length: 30 }, (_, i) => `para ${i} needle`).join("\n\n") });
+  assert.match(find(many, "needle", { maxPassages: 5, context: 0 }), /\(best 5 of 30 matching blocks shown\)/);
+}
+
+// Anchors: heading ids from the HTML give citable links in outline and section
+{
+  const html = `<html><body><article><h1>Doc</h1>${"<p>Intro text for the anchor test.</p>".repeat(8)}
+    <h2 id="History">History</h2><p>${"Old times. ".repeat(20)}</p>
+    <h2><span id="s-2"></span>2. Uses &amp; more</h2><p>${"Uses text. ".repeat(20)}</p>
+    <h2>No id here</h2><p>${"Plain text. ".repeat(20)}</p></article></body></html>`;
+  const page = extract(html, { links: false });
+  assert.deepEqual(page.anchors, { history: "History", "2usesmore": "s-2" });
+  const text = formatPage({ url: "https://x.example/doc#top", ...page });
+  const o = outline(text, page.anchors);
+  assert.match(o, /Cite a section as its page URL \+ "#" \+ anchor\./);
+  assert.match(o, /- #\d+ History \(\d+ chars, anchor=History\)/);
+  assert.match(o, /- #\d+ 2\. Uses & more \(\d+ chars, anchor=s-2\)/);
+  assert.match(o, /- #\d+ No id here \(\d+ chars\)/);
+  assert.match(section(text, "Uses", page.anchors), /\nSection link: https:\/\/x\.example\/doc#s-2\n\n## 2\\\. Uses/); // turndown escapes "2."
+  assert.ok(!section(text, "No id", page.anchors).includes("Section link"));
+  assert.ok(!outline(text).includes("anchor="), "no anchors given, none shown");
+}
+
+// Excel dates: built-in and custom date/time formats, the 1904 system; money and counts stay numbers
+{
+  const book = (date1904) => officeToMarkdown(Buffer.from(zipSync({
+    "xl/workbook.xml": strToU8(`<workbook>${date1904 ? '<workbookPr date1904="1"/>' : ""}<sheets><sheet name="D" r:id="r1"/></sheets></workbook>`),
+    "xl/_rels/workbook.xml.rels": strToU8('<Relationships><Relationship Id="r1" Target="worksheets/sheet1.xml"/></Relationships>'),
+    "xl/styles.xml": strToU8('<styleSheet><numFmts><numFmt numFmtId="164" formatCode="yyyy\\-mm\\-dd hh:mm"/><numFmt numFmtId="165" formatCode="&quot;$&quot;#,##0.00"/><numFmt numFmtId="166" formatCode="[$-409]h:mm AM/PM"/></numFmts><cellXfs count="5"><xf numFmtId="0"/><xf numFmtId="14"/><xf numFmtId="164"/><xf numFmtId="165"/><xf numFmtId="166"/></cellXfs></styleSheet>'),
+    "xl/worksheets/sheet1.xml": strToU8('<worksheet><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>n</t></is></c><c r="B1" t="inlineStr"><is><t>d</t></is></c><c r="C1" t="inlineStr"><is><t>dt</t></is></c><c r="D1" t="inlineStr"><is><t>money</t></is></c><c r="E1" t="inlineStr"><is><t>t</t></is></c></row><row r="2"><c r="A2" s="0"><v>41640</v></c><c r="B2" s="1"><v>41640</v></c><c r="C2" s="2"><v>41640.5</v></c><c r="D2" s="3"><v>41640</v></c><c r="E2" s="4"><v>0.75</v></c></row></sheetData></worksheet>'),
+  })), "xlsx").markdown.split("\n").pop();
+  assert.equal(book(false), "| 41640 | 2014-01-01 | 2014-01-01 12:00 | 41640 | 18:00 |");
+  assert.equal(book(true), "| 41640 | 2018-01-02 | 2018-01-02 12:00 | 41640 | 18:00 |");
 }
 
 // Headings made only of markup are listed as (untitled) and readable by number (found by test-fuzz.mjs)

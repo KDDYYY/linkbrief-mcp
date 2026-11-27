@@ -21,6 +21,9 @@ const DEFAULT_URLS = [
   "https://stackoverflow.com/questions/11227809",
   "https://news.ycombinator.com/item?id=8863",
   "https://arxiv.org/abs/1706.03762",
+  // Markdown served for language models (llms.txt and .md docs)
+  "https://docs.stripe.com/llms.txt",
+  "https://docs.stripe.com/testing-use-cases.md",
   // Office documents
   "https://calibre-ebook.com/downloads/demos/demo.docx",
   "https://go.microsoft.com/fwlink/?LinkID=521962",

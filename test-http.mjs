@@ -59,6 +59,7 @@ const routes = {
   "/docs/api": (req, res) => send(res, 200, "text/html", page("API", "<h2>Auth</h2>" + para("Token auth.") + "<h2>Errors</h2>" + para("Error codes."))),
   "/docs/secret": (req, res) => routes["/article"](req, res),
   "/bigpart": (req, res) => send(res, 200, "text/html", page("Big", `<h2>Intro</h2>${para("Short.")}<h2>Huge</h2>${Array.from({ length: 10 }, (_, i) => para(`Chunk ${i}.`)).join("")}`)),
+  "/anchored": (req, res) => send(res, 200, "text/html", page("Anchored", `<h2 id="install">Install</h2>${para("Run the installer.")}<h2 id="use">Use</h2>${para("Open the app.")}`)),
   "/long": (req, res) => send(res, 200, "text/html", page("Long", Array.from({ length: 12 }, (_, i) => `<h2>Part ${i + 1}</h2>${para(`Body ${i + 1}.`)}`).join(""))),
 };
 function send(res, status, type, body) {
@@ -135,6 +136,39 @@ delete process.env.LINKBRIEF_ROBOTS;
   assert.equal(early.pages.length, 0);
 }
 
+// llms.txt and Markdown docs, on a second local site; a third site answers every path with its home page
+{
+  const serve = (handler) => new Promise((r) => {
+    const s = http.createServer(handler);
+    s.listen(0, "127.0.0.1", () => r(s));
+  });
+  const md = (title, body) => `# ${title}\n\n${body}\n`;
+  let docsBase;
+  const docs = await serve((req, res) => {
+    const p = new URL(req.url, "http://x").pathname;
+    if (p === "/llms.txt") return send(res, 200, "text/plain; charset=utf-8", `# Docs\n\n> Index for language models.\n\n- [Start](/guide/start.md): first steps\n- [API](${docsBase}/guide/api.md): reference\n- [Outside](/other/x.md): not under /guide/\n- [Elsewhere](https://elsewhere.example/a)\n`);
+    if (p === "/guide/") return send(res, 200, "text/html", page("Guide", para('<a href="/guide/start.md">Start</a>')));
+    if (p === "/guide/start.md") return send(res, 200, "text/markdown; charset=utf-8", md("Start", `Install with [npm](https://npmjs.com). ${"More words for length. ".repeat(10)}`));
+    if (p === "/guide/api.md") return send(res, 200, "text/markdown", md("API", "## Auth\n\nUse a token."));
+    send(res, 404, "text/html", "<html><body>nope</body></html>");
+  });
+  docsBase = `http://127.0.0.1:${docs.address().port}`;
+  testAllowHosts.add(new URL(docsBase).host);
+  const spa = await serve((req, res) => send(res, 200, "text/html", page("App home", para("Same page for every path."))));
+  const spaBase = `http://127.0.0.1:${spa.address().port}`;
+  testAllowHosts.add(new URL(spaBase).host);
+
+  const r = await crawlSite(`${docsBase}/guide/`, { maxPages: 10, delayMs: 0, links: false });
+  assert.equal(r.llmsTxt, `${docsBase}/llms.txt`);
+  assert.deepEqual(r.pages.map((p) => new URL(p.url).pathname), ["/llms.txt", "/guide/", "/guide/start.md", "/guide/api.md"]);
+  const start = r.pages.find((p) => p.url.endsWith("start.md")).text;
+  assert.match(start, /Install with npm\./, "Markdown links reduced to their text when include_links is off");
+  assert.ok(!(await crawlSite(`${spaBase}/x/`, { maxPages: 3, delayMs: 0 })).llmsTxt, "a home page served at /llms.txt is not an index");
+  assert.equal((await crawlSite(`${docsBase}/guide/`, { maxPages: 3, delayMs: 0, useLlmsTxt: false })).llmsTxt, null);
+  docs.close();
+  spa.close();
+}
+
 // MCP tools over an in-memory transport
 {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
@@ -162,6 +196,20 @@ delete process.env.LINKBRIEF_ROBOTS;
   assert.ok(r.err && /section number/.test(r.text));
   r = await call("fetch_page", { url: `${base}/article`, include_links: false });
   assert.ok(!r.err);
+
+  // find, alone and inside a section, with the paging note keeping both
+  r = await call("fetch_page", { url: `${base}/long`, find: '"Body 7"' });
+  assert.match(r.text, /Found 1 block mentioning "body 7"[\s\S]*--- in: Part 7 ---\n## Part 7\n\nBody 7\./);
+  r = await call("fetch_page", { url: `${base}/bigpart`, section: "Huge", find: "Chunk", max_length: 1000 });
+  assert.match(r.text, /Call fetch_page again with section="Huge" and find="Chunk" and start_index=\d+ for more\.\]$/);
+  r = await call("fetch_page", { url: `${base}/long`, find: "nothing-like-this" });
+  assert.ok(!r.err && /No passage mentions/.test(r.text));
+
+  // anchors in outline and section
+  r = await call("fetch_page", { url: `${base}/anchored`, outline: true });
+  assert.match(r.text, /- #\d+ Install \(\d+ chars, anchor=install\)/);
+  r = await call("fetch_page", { url: `${base}/anchored`, section: "Install" });
+  assert.match(r.text, new RegExp(`Section link: ${base.replace(/\./g, "\\.")}/anchored#install`));
 
   r = await call("fetch_pages", { urls: [`${base}/article`, `${base}/nope`], max_length_per_page: 1000 });
   assert.ok(!r.err);

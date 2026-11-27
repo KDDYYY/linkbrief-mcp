@@ -14,7 +14,7 @@ import { normalizeUrl, pickFor, sites } from "./sites.mjs";
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 30 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
-const TEXT_TYPES = /^(text\/html|application\/xhtml\+xml|text\/plain)\b/i;
+const TEXT_TYPES = /^(text\/html|application\/xhtml\+xml|text\/plain|text\/(x-)?markdown)\b/i;
 const ZERO_WIDTH = /[​-‍﻿]/g;
 
 const turndown = new TurndownService({ headingStyle: "atx", codeBlockStyle: "fenced", bulletListMarker: "-" });
@@ -80,7 +80,14 @@ export function extract(html, { links = true, pick } = {}) {
   const siteName = (article?.siteName || meta('meta[property="og:site_name"]')).trim();
   const published = (article?.publishedTime || meta('meta[property="article:published_time"]')).trim();
   const hrefs = [...document.querySelectorAll("a[href]")].map((a) => a.getAttribute("href")); // for fetch_site
-  return { title, byline, siteName, published, hrefs, markdown: toMarkdown(useArticle ? article.content : document.body?.innerHTML || html, { links }) };
+  // Heading ids (lost in Markdown) so outline/section can give exact links such as page#History for citations.
+  const anchors = {};
+  for (const h of document.querySelectorAll("h1, h2, h3, h4, h5, h6")) {
+    const id = h.id || h.querySelector("[id]")?.id;
+    const key = anchorKey(h.textContent);
+    if (id && key && !(key in anchors)) anchors[key] = id;
+  }
+  return { title, byline, siteName, published, hrefs, anchors, markdown: toMarkdown(useArticle ? article.content : document.body?.innerHTML || html, { links }) };
 }
 
 // HTML fragment -> tidy Markdown (also used for API bodies, which need no Readability).
@@ -125,6 +132,8 @@ export function formatPage({ url, title, byline, siteName, published, pages, mar
 
 // ---- Outline / section reading: let the agent see a page's structure first and read only what it needs.
 const HEADING = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
+// Heading text reduced to letters and digits, to pair Markdown headings with the HTML heading ids.
+const anchorKey = (s) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 const plainHeading = (s) => s.replace(MD_LINK, "$1").replace(/[*_`]/g, "").replace(/\\([[\]().#-])/g, "$1").trim();
 
 // formatPage output is "# title\ninfo line" + blank line + body; the head is kept on every outline/section reply.
@@ -151,7 +160,11 @@ export function sections(md) {
   }));
 }
 
-export function outline(text) {
+// anchors: heading key -> HTML id, from extract(); a section's citable link is the page URL + "#" + id.
+const anchorOf = (s, anchors) => anchors?.[anchorKey(s.title)];
+const pageUrlOf = (head) => /(?:^|\| )URL: (\S+)/m.exec(head)?.[1];
+
+export function outline(text, anchors) {
   const [head, body] = splitHead(text);
   const secs = sections(body);
   if (!secs.length) return `${head}\n\n(No headings on this page; it is ${body.length.toLocaleString("en-US")} characters. Read it without outline.)`;
@@ -160,14 +173,16 @@ export function outline(text) {
     const first = body.slice(s.start, s.ownEnd).split("\n").slice(1).map((l) => l.trim()).find((l) => l && !/^[|-]+$/.test(l)) || "";
     const plain = first.replace(MD_LINK, "$1").replace(/[*_`>|#]/g, "").replace(/\s+/g, " ").trim();
     const preview = plain.length > 100 ? `${plain.slice(0, 100)}…` : plain;
+    const anchor = anchorOf(s, anchors);
     // Headings made only of markup ("## **") end up empty: label them so the agent picks them by number.
-    return `${"  ".repeat(s.level - top)}- #${i + 1} ${s.title || "(untitled)"} (${(s.end - s.start).toLocaleString("en-US")} chars)${preview ? `: ${preview}` : ""}`;
+    return `${"  ".repeat(s.level - top)}- #${i + 1} ${s.title || "(untitled)"} (${(s.end - s.start).toLocaleString("en-US")} chars${anchor ? `, anchor=${anchor}` : ""})${preview ? `: ${preview}` : ""}`;
   });
-  return `${head}\n\nOutline: ${secs.length} sections, ${body.length.toLocaleString("en-US")} characters in total. Read one with section="#N" or its heading text.\n\n${rows.join("\n")}`;
+  const cite = rows.some((r) => r.includes(", anchor=")) ? " Cite a section as its page URL + \"#\" + anchor." : "";
+  return `${head}\n\nOutline: ${secs.length} sections, ${body.length.toLocaleString("en-US")} characters in total. Read one with section="#N" or its heading text.${cite}\n\n${rows.join("\n")}`;
 }
 
 // One section with its subsections, by outline number ("#3") or heading text (exact first, then partial match).
-export function section(text, wanted) {
+export function section(text, wanted, anchors) {
   const [head, body] = splitHead(text);
   const secs = sections(body);
   if (!secs.length) throw new Error("This page has no headings; read it without section.");
@@ -180,15 +195,84 @@ export function section(text, wanted) {
     const list = secs.slice(0, 40).map((s, i) => `#${i + 1} ${s.title}`).join("; ");
     throw new Error(`No section matches "${wanted}". Sections: ${list}${secs.length > 40 ? "; …" : ""}`);
   }
-  return `${head}\n\n${body.slice(hit.start, hit.end).trimEnd()}`;
+  const anchor = anchorOf(hit, anchors);
+  const pageUrl = pageUrlOf(head);
+  const link = anchor && pageUrl ? `\nSection link: ${pageUrl.replace(/#.*$/, "")}#${anchor.replace(/ /g, "%20")}` : "";
+  return `${head}${link}\n\n${body.slice(hit.start, hit.end).trimEnd()}`;
+}
+
+// Blank-line separated blocks of a Markdown body (a fenced code block stays one block), each tagged with
+// the headings it sits under.
+function blocksOf(body) {
+  const blocks = [];
+  const path = [];
+  let cur = [];
+  let fence = false;
+  const flush = () => {
+    const text = cur.join("\n").trim();
+    cur = [];
+    if (!text) return;
+    const h = !fence && HEADING.exec(text.split("\n")[0]);
+    if (h) {
+      const level = h[1].length;
+      while (path.length && path[path.length - 1].level >= level) path.pop();
+      path.push({ level, title: plainHeading(h[2]) || "(untitled)" });
+    }
+    const where = path.map((p) => p.title);
+    // A long list or table with no blank lines (Wikipedia references) would come back whole for one hit: split it by line.
+    if (!h && text.length > 1200) text.split("\n").filter((l) => l.trim()).forEach((l) => blocks.push({ text: l, heading: false, path: where, line: true }));
+    else blocks.push({ text, heading: Boolean(h), path: where });
+  };
+  for (const line of body.split("\n")) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    if (!fence && !line.trim()) flush();
+    else cur.push(line);
+  }
+  flush();
+  return blocks;
+}
+
+// Passages that mention the query: words or "quoted phrases", case-insensitive, any of them.
+// Each hit comes with one block of context either side and the headings it sits under.
+export function find(text, query, { context = 1, maxPassages = 20 } = {}) {
+  const [head, body] = splitHead(text);
+  const terms = [...query.matchAll(/"([^"]+)"|(\S+)/g)].map((m) => (m[1] || m[2]).toLowerCase().trim()).filter(Boolean);
+  if (!terms.length) throw new Error("Give words or a \"quoted phrase\" to find.");
+  const blocks = blocksOf(body);
+  const hits = [];
+  blocks.forEach((b, i) => {
+    const lower = b.text.toLowerCase();
+    const score = terms.filter((t) => lower.includes(t)).length;
+    if (score) hits.push({ i, score });
+  });
+  if (!hits.length) return `${head}\n\nNo passage mentions ${terms.map((t) => `"${t}"`).join(" or ")}. Try other words, or outline=true to see what the page covers.`;
+  // Keep the best-scoring hits when there are too many, then show them in page order.
+  const kept = [...hits].sort((a, b) => b.score - a.score || a.i - b.i).slice(0, maxPassages).sort((a, b) => a.i - b.i);
+  const ranges = [];
+  for (const { i } of kept) {
+    const from = Math.max(0, i - context);
+    const to = Math.min(blocks.length - 1, i + context + (blocks[i].heading ? 1 : 0)); // a matching heading brings its text
+    const last = ranges[ranges.length - 1];
+    if (last && from <= last.to + 1) last.to = Math.max(last.to, to);
+    else ranges.push({ from, to });
+  }
+  const passages = ranges.map(({ from, to }) => {
+    const where = blocks[from].path.join(" › ");
+    // Lines cut from one long list are rejoined with single newlines, so the list keeps its shape.
+    const shown = blocks.slice(from, to + 1);
+    const body = shown.map((b, k) => (k && b.line && shown[k - 1].line ? "\n" : k ? "\n\n" : "") + b.text).join("");
+    return `--- ${where ? `in: ${where}` : "top of page"} ---\n${body}`;
+  });
+  const more = hits.length > kept.length ? ` (best ${kept.length} of ${hits.length} matching blocks shown)` : "";
+  return `${head}\n\nFound ${hits.length} block${hits.length > 1 ? "s" : ""} mentioning ${terms.map((t) => `"${t}"`).join(" or ")}${more}. Read a whole part with section="<heading>".\n\n${passages.join("\n\n")}`;
 }
 
 // One window of a long text, plus a note telling Claude how to read the rest.
 export function paginate(text, startIndex = 0, maxLength = 20000) {
   if (startIndex > 0 && startIndex >= text.length) return `(No more content: total length is ${text.length} characters.)`;
   let end = Math.min(text.length, startIndex + maxLength);
-  // Never cut a surrogate pair (emoji, rare CJK) in half.
-  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end--;
+  // Never cut a surrogate pair (emoji, rare CJK) in half: step back, or forward when stepping back would leave nothing.
+  if (end < text.length && /[\uD800-\uDBFF]/.test(text[end - 1])) end = end - 1 > startIndex ? end - 1 : end + 1;
   const part = text.slice(startIndex, end);
   return end < text.length
     ? `${part}\n\n[Truncated: showing characters ${startIndex}-${end} of ${text.length}. Call fetch_page again with start_index=${end} for more.]`
@@ -216,6 +300,21 @@ export function isBlockedIp(ip) {
 // Refuse loopback, LAN, link-local and cloud-metadata addresses so a prompt-injected page
 // cannot make Claude read the user's internal network.
 // shortcut: fetch() resolves DNS again, so a DNS-rebinding host could still slip through; pin the IP via an undici dispatcher if that matters.
+// Corporate networks: like other CLI tools, send requests through HTTPS_PROXY / HTTP_PROXY, honouring NO_PROXY.
+// Node's built-in fetch ignores these variables, so undici's proxy agent is installed on the first request.
+export const proxyUrl = () => process.env.HTTPS_PROXY || process.env.https_proxy || process.env.HTTP_PROXY || process.env.http_proxy || "";
+let proxySetup;
+function setupProxy() {
+  return (proxySetup ??= proxyUrl()
+    ? import("undici").then(({ EnvHttpProxyAgent, setGlobalDispatcher }) => setGlobalDispatcher(new EnvHttpProxyAgent()))
+    : Promise.resolve());
+}
+
+// Behind a proxy the PC often cannot resolve outside names itself; the proxy does. Such names are let through
+// unless they look internal (no dot, or an intranet suffix) — the proxy then decides what it can reach.
+// shortcut: an internal host with a public-looking name is only as protected as the proxy's own rules.
+const INTRANET_NAME = /(^[^.]+$)|\.(local|localdomain|internal|intranet|corp|lan|home|home\.arpa)$/i;
+
 // Test-only: exact host:port values the guard lets through (the test suite's local server). Nothing else sets it.
 export const testAllowHosts = new Set();
 
@@ -224,9 +323,13 @@ export async function assertPublicUrl(url) {
   if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error(`Only http/https URLs are allowed: ${url}`);
   if (testAllowHosts.has(u.host)) return;
   const host = u.hostname.replace(/^\[|\]$/g, "");
-  const ips = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true }).catch(() => {
+  let ips;
+  try {
+    ips = net.isIP(host) ? [host] : (await dns.lookup(host, { all: true })).map((r) => r.address);
+  } catch {
+    if (proxyUrl() && !INTRANET_NAME.test(host)) return; // the proxy resolves it
     throw new Error(`Could not resolve host: ${host}`);
-  })).map((r) => r.address);
+  }
   if (ips.some(isBlockedIp)) throw new Error(`Refusing to fetch a private or local address: ${url}`);
 }
 
@@ -267,7 +370,8 @@ export async function readBody(res) {
   return decoder.decode(bytes).normalize("NFC"); // windows-1258 (Vietnamese) decodes tones as combining marks
 }
 
-function get(url, cookie, extraHeaders) {
+async function get(url, cookie, extraHeaders) {
+  await setupProxy();
   const once = () => fetch(url, {
     headers: {
       "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36",
@@ -334,7 +438,7 @@ async function fetchRendered(url, links) {
   if (rendered.status >= 400) throw new Error(`Fetch failed in browser: HTTP ${rendered.status} for ${rendered.url}`);
   const page = extract(rendered.html, { links, pick: pickFor(rendered.url) });
   if (page.markdown.length < 200) throw new Error(`Page text too short even after JavaScript rendering - page may need login: ${rendered.url}`);
-  return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }), hrefs: page.hrefs };
+  return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }), hrefs: page.hrefs, anchors: page.anchors };
 }
 
 // Plain request first; pages that block it (403/429/503) or come back empty retry in a local browser.
@@ -416,15 +520,18 @@ async function fetchPlain(raw, { links }) {
     } else if (officeKind(type, url)) {
       page = officeToMarkdown(await readBytes(res, MAX_PDF_BYTES), officeKind(type, url));
       if (!page.markdown) throw new Error(`Document has no text: ${url}`);
-    } else if (/^text\/plain\b/i.test(type)) {
-      page = { markdown: (await readBody(res)).trim() };
+    } else if (/^text\/(plain|(x-)?markdown)\b/i.test(type)) {
+      // Plain text (code files, llms.txt) and Markdown docs: links are collected before any are stripped, for fetch_site.
+      const raw = (await readBody(res)).trim();
+      const hrefs = [...raw.matchAll(/\]\(([^)\s]+)/g)].map((m) => m[1]);
+      page = { markdown: /markdown/i.test(type) ? tidyMarkdown(raw, { links }) : raw, hrefs };
     } else {
       const html = await readBody(res);
       if (isBotWall(html)) throw botWallError(url);
       page = extract(html, { links, pick: pickFor(url) });
       if (page.markdown.length < 200) throw browserRetryable(`Page text too short (${page.markdown.length} chars) - page may need JavaScript or login: ${url}`, url);
     }
-    return { url, text: formatPage({ url, ...page }), hrefs: page.hrefs };
+    return { url, text: formatPage({ url, ...page }), hrefs: page.hrefs, anchors: page.anchors };
   }
 }
 
@@ -433,7 +540,9 @@ const ASSET = /\.(png|jpe?g|gif|svg|webp|ico|css|js|mjs|json|xml|txt|zip|gz|tgz|
 // Reads up to maxPages pages under the start page's folder, breadth-first: always honours robots.txt
 // and pauses between requests. fetcher/allow are injectable for tests.
 // budgetMs stops early with what was read, so a slow site cannot push the reply past the agent's tool timeout.
-export async function crawlSite(start, { maxPages = 10, links = false, delayMs = 500, budgetMs = 45000, fetcher = fetchText, allow = robotsAllow } = {}) {
+// If the site publishes /llms.txt (an index written for language models), it is read first and the
+// pages it lists are queued right after the start page, in the order listed.
+export async function crawlSite(start, { maxPages = 10, links = false, delayMs = 500, budgetMs = 45000, useLlmsTxt = true, fetcher = fetchText, allow = robotsAllow } = {}) {
   const deadline = Date.now() + budgetMs;
   let timedOut = false;
   const first = new URL(normalizeUrl(start));
@@ -443,6 +552,26 @@ export async function crawlSite(start, { maxPages = 10, links = false, delayMs =
   const seen = new Set(queue);
   const pages = [];
   const skipped = [];
+  const enqueue = (href, base) => {
+    let next;
+    try { next = new URL(href, base); } catch { return; }
+    next.hash = "";
+    if (!next.href.startsWith(scope) || ASSET.test(next.pathname) || seen.has(next.href)) return;
+    seen.add(next.href);
+    queue.push(next.href);
+  };
+  let llmsTxt = null;
+  const index = `${first.origin}/llms.txt`;
+  if (useLlmsTxt && maxPages > 1 && index !== first.href && (await allow(index))) {
+    const page = await fetcher(index, { links }).catch(() => null);
+    // A real index lists Markdown links; a site that answers every path with its home page does not.
+    if (page && (page.hrefs || []).length >= 3 && !/^# /.test(page.text)) {
+      llmsTxt = index;
+      seen.add(index);
+      pages.push(page);
+      for (const href of page.hrefs) enqueue(href, index);
+    }
+  }
   while (queue.length && pages.length < maxPages) {
     if (Date.now() > deadline) { timedOut = true; break; }
     const url = queue.shift();
@@ -451,21 +580,14 @@ export async function crawlSite(start, { maxPages = 10, links = false, delayMs =
     try {
       const page = await fetcher(url, { links });
       pages.push(page);
-      for (const href of page.hrefs || []) {
-        let next;
-        try { next = new URL(href, page.url); } catch { continue; }
-        next.hash = "";
-        if (!next.href.startsWith(scope) || ASSET.test(next.pathname) || seen.has(next.href)) continue;
-        seen.add(next.href);
-        queue.push(next.href);
-      }
+      for (const href of page.hrefs || []) enqueue(href, page.url);
     } catch (err) {
       skipped.push(`${url} (${err.message.slice(0, 100)})`);
     }
   }
   // Only count leftovers robots.txt would let us read (rules are cached per site, so this costs no requests).
   const readable = await Promise.all(queue.map((u) => allow(u)));
-  return { scope, pages, skipped, notRead: readable.filter(Boolean).length, timedOut };
+  return { scope, pages, skipped, notRead: readable.filter(Boolean).length, timedOut, llmsTxt };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
