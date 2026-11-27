@@ -462,6 +462,28 @@ assert.ok(!isBotWall(fixture("article-with-nav.html").replace("</body>", '<scrip
   assert.match(sectioned.markdown, /About the team/);
 }
 
+// Shop category pages: hidden spec lists are dropped, the product grid is found and each card is one line
+{
+  const card = (i) => `<li><a href="/p/${i}"><img src="/t/${i}.jpg"><div class="info"><p>Product ${i} name</p><p>Soft and warm fabric</p><p>49,000 won</p><p>44,100 won coupon</p></div></a>
+    <ul class="spec"><li class="displaynone">Model: X-${i}</li><li class="displaynone">Maker: in-house supplier and long hidden text ${"x".repeat(80)}</li></ul></li>`;
+  const recommended = `<div class="reco"><h2>Recommended</h2><ul>${[1, 2].map((i) => `<li><p>Reco ${i}</p><p hidden>${"hidden spec ".repeat(40)}</p></li>`).join("")}</ul></div>`;
+  const shop = `<html><head><title>Sale</title></head><body><nav><ul>${Array.from({ length: 12 }, (_, i) => `<li><a href="/c/${i}">Menu ${i}</a></li>`).join("")}</ul></nav>
+    ${recommended}<p>120 products</p><ul class="grid">${Array.from({ length: 12 }, (_, i) => card(i)).join("")}</ul><footer>Shop footer</footer></body></html>`;
+  const p = extract(shop, { links: false });
+  assert.doesNotMatch(p.markdown, /Model: X-|Maker:|hidden spec/, "hidden elements are dropped");
+  const tabs = extract(`<html><body><div><a href="/a">Top story</a></div><div class="tab" style="display: none"><a href="/b">Second tab headline that readers can open</a></div></body></html>`);
+  assert.match(tabs.markdown, /Second tab headline/, "inline display:none (tab panels) is kept");
+  assert.equal((p.markdown.match(/^- Product \d+ name · Soft and warm fabric · 49,000 won · 44,100 won coupon$/gm) || []).length, 12, p.markdown);
+  assert.doesNotMatch(p.markdown, /Menu 3/, "menus are not taken for the grid");
+  assert.match(extract(shop, { links: true }).markdown, /^- \[Product 0 name · Soft and warm fabric · 49,000 won · 44,100 won coupon\]\(\/p\/0\)$/m, "a card that is one link keeps it");
+
+  // Items with a long block (listicles, steps) keep their paragraphs
+  const long = "This step explains in detail what to do and why it matters for the result you want. ";
+  const listicle = extract(`<html><body><article><h1>Guide</h1><ol>${[1, 2, 3].map((i) => `<li><h3>Step ${i}</h3><p>${long.repeat(2)}</p></li>`).join("")}</ol></article></body></html>`);
+  assert.match(listicle.markdown, /Step 1\n\n/, listicle.markdown);
+  assert.doesNotMatch(listicle.markdown, / · /);
+}
+
 // Browser discovery honours LINKBRIEF_BROWSER
 {
   const saved = process.env.LINKBRIEF_BROWSER;

@@ -96,7 +96,59 @@ function labelLinks(document) {
   return document;
 }
 
-const prepare = (html) => labelLinks(inlineFrames(unwrapMediaWikiHeadings(parseHTML(html).document)));
+// Hidden elements are not page content: shop item cards carry long hidden spec lists (class "displaynone"),
+// which also made the extractor pick them over the real product grid. Inline display:none is kept on purpose:
+// news front pages hide real headlines that way in tab panels a reader can open.
+function dropHidden(document) {
+  for (const el of document.querySelectorAll("[hidden], .displaynone")) el.remove();
+  return document;
+}
+
+const prepare = (html) => dropHidden(labelLinks(inlineFrames(unwrapMediaWikiHeadings(parseHTML(html).document))));
+
+// A card is a list item built from several short blocks (product or listing cards: name, tagline, price,
+// coupon price). Items with any long block (listicles, steps) or a nested list or table are not cards.
+const CARD_BLOCKS = "p, div, li, dt, dd, h1, h2, h3, h4, h5, h6";
+function cardParts(li) {
+  if (li.querySelector("ul li, ol li, table") || !li.querySelector(CARD_BLOCKS)) return null; // empty lists (hidden specs removed) don't count
+  const marked = li.cloneNode(true);
+  for (const el of [...marked.querySelectorAll(CARD_BLOCKS + ", br")]) el.parentNode.insertBefore(li.ownerDocument.createTextNode("\u0000"), el);
+  const parts = marked.textContent.split("\u0000").map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
+  return parts.length >= 2 && parts.every((p) => p.length <= 100) ? parts : null;
+}
+
+// Cards become one line "name · tagline · price" instead of a line per field; a card that is one link keeps it.
+function compactCards(html) {
+  const { document } = parseHTML(`<html><body>${html}</body></html>`);
+  for (const li of document.querySelectorAll("li")) {
+    const parts = cardParts(li);
+    if (!parts) continue;
+    const links = li.querySelectorAll("a[href]");
+    const text = parts.join(" · ");
+    if (links.length === 1 && links[0].textContent.replace(/\s+/g, " ").trim().length >= 0.8 * li.textContent.replace(/\s+/g, " ").trim().length) {
+      const a = document.createElement("a");
+      a.setAttribute("href", links[0].getAttribute("href"));
+      a.textContent = text;
+      li.replaceChildren(a);
+    } else li.textContent = text;
+  }
+  return document.body.innerHTML;
+}
+
+// Category and search pages: the content is a grid of cards (products, listings), which the extractor
+// skips because each card is one big link. A grid is a list of at least 8 items, mostly cards; menus and
+// listicles are not. shortcut: lists (ul/ol) only; grids built from bare <div>s are not found.
+function itemGrid(document) {
+  let best = null;
+  for (const list of document.querySelectorAll("ul, ol")) {
+    if (list.closest("nav, header, footer, aside")) continue;
+    const items = [...list.children].filter((c) => c.nodeName === "LI");
+    if (items.length < 8 || items.filter(cardParts).length < 0.7 * items.length) continue;
+    const length = list.textContent.replace(/\s+/g, " ").trim().length;
+    if (length > (best?.length || 0)) best = { list, length };
+  }
+  return best;
+}
 
 // Images in the main content, as absolute URLs: icons, logos and spacers are left out by name and size.
 const NOT_CONTENT_IMAGE = /logo|icon|sprite|blank|spacer|emoji|emoticon|avatar|profile|badge|btn|button|banner|loading|pixel|1x1/i;
@@ -126,6 +178,8 @@ export function extract(html, { links = true, pick, url } = {}) {
   const main = !picked && document.querySelector("main");
   const kept = article?.textContent?.trim().length || 0;
   if (main && kept < 1500 && main.textContent.trim().length > 2 * kept) article = { ...article, content: main.innerHTML, textContent: main.textContent };
+  const grid = !picked && itemGrid(document);
+  if (grid && grid.length > 0.5 * (article?.textContent?.trim().length || 0)) article = { ...article, content: grid.list.outerHTML, textContent: grid.list.textContent };
   const useArticle = picked || (article && article.textContent.trim().length >= 200);
   const title = (article?.title || document.title || "").trim();
   const meta = (sel) => document.querySelector(sel)?.getAttribute("content")?.trim() || "";
@@ -142,7 +196,7 @@ export function extract(html, { links = true, pick, url } = {}) {
     if (id && key && !(key in anchors)) anchors[key] = id;
   }
   const content = useArticle ? article.content : document.body?.innerHTML || html;
-  return { title, byline, siteName, published, hrefs, anchors, images: contentImages(content, url), markdown: toMarkdown(content, { links }) };
+  return { title, byline, siteName, published, hrefs, anchors, images: contentImages(content, url), markdown: toMarkdown(compactCards(content), { links }) };
 }
 
 // HTML fragment -> tidy Markdown (also used for API bodies, which need no Readability).

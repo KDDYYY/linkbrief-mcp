@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.3 — 2026-11-27
+
+### Added
+- **Shop category and search pages:** the product grid is recognized as the content (each card is one big link, so the extractor used to pick a "recommended" block instead) and every card becomes one line: name · tagline · price · coupon price. A card that is one link keeps it with `include_links`. Long list items (listicles, steps) are left as they are.
+
+### Fixed
+- Elements marked hidden (`hidden` attribute, `displaynone` class) are dropped: shop cards carried long hidden spec lists (model, maker, A/S contact) that outweighed the real content. Inline `display:none` is kept, since news front pages hide real headlines that way in tab panels.
+
 ## 0.5.2 — 2026-11-27
 
 ### Added

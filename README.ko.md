@@ -108,6 +108,7 @@ PDF, `.docx`, `.pptx`, `.xlsx`, `.hwpx` 링크를 붙여 넣으세요. 다운로
 | ✅ 웹 페이지 | 모든 언어. JavaScript 페이지는 설치된 Chrome·Edge로. Shift_JIS, GBK, Big5, EUC-KR 등 |
 | ✅ 개발자 사이트 | GitHub 이슈·PR·코드 파일 · Stack Overflow·Stack Exchange · Hacker News · arXiv · `llms.txt` 문서 사이트 |
 | ✅ 문서 | PDF, Word, PowerPoint, Excel, 한글(.hwpx) |
+| ✅ 쇼핑몰 | 카테고리·검색 목록: 상품마다 한 줄(이름·설명·가격·쿠폰가), 숨겨진 사양표는 제외 |
 | ✅ 이미지 속 글 | 이미지로 올린 채용공고·포스터·공지: 에이전트가 이미지를 직접 봅니다 |
 | ✅ 국내 사이트 | 네이버 블로그, 네이버·다음 뉴스, 나무위키, 티스토리, 브런치, 벨로그 |
 | ❌ 미지원 | 로그인·봇 확인이 필요한 페이지(Medium, Reddit), Google 검색 결과, YouTube 자막, 스캔 PDF |
