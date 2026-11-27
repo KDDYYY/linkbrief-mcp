@@ -321,7 +321,7 @@ Main content as Markdown
 | Stack Overflow, Super User, Server Fault, Ask Ubuntu, *.stackexchange.com questions | ✅ via the Stack Exchange API (question + top 10 answers) |
 | Hacker News threads, arXiv (abstract page → paper) | ✅ |
 | News: BBC, The Verge, Le Monde, Der Spiegel, NHK, People's Daily, Thairath, VnExpress, … | ✅ |
-| Korean sites: Naver Blog, Naver News, Daum News, Namuwiki, Tistory, Brunch, Velog, Daum Cafe (public posts) | ✅ |
+| Korean sites: Naver Blog, Naver News, Daum News, Namuwiki, Tistory, Brunch, Velog | ✅ |
 | PDFs (checked in English and Korean, split by page) | ✅ |
 | Word (.docx), PowerPoint (.pptx), Excel (.xlsx, first 200 rows per sheet), Hangul (.hwpx) | ✅ (Excel dates appear as serial numbers) |
 | Old binary Hangul (.hwp) | ❌ save as .hwpx or PDF |

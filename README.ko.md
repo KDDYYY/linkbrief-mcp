@@ -301,7 +301,7 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 
 | 대상 | 상태 |
 |---|---|
-| 네이버 블로그, 네이버 뉴스, 다음 뉴스, 티스토리, 브런치, 벨로그, 다음 카페(공개 글) | ✅ |
+| 네이버 블로그, 네이버 뉴스, 다음 뉴스, 티스토리, 브런치, 벨로그 | ✅ |
 | 위키백과(모든 언어), 나무위키, MDN·Python 문서, Google 블로그, GitHub 저장소 | ✅ |
 | GitHub 이슈·PR(댓글 전체, 변경 파일), GitHub 코드 파일(원본) | ✅ GitHub API 사용 (시간당 60회, `GITHUB_TOKEN`이 있으면 더 많이) |
 | Stack Overflow, Super User, Server Fault, Ask Ubuntu, *.stackexchange.com 질문 | ✅ Stack Exchange API 사용 (질문 + 추천순 답변 10개) |
