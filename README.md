@@ -29,10 +29,10 @@ Needs [Node.js](https://nodejs.org) 22.12+. For Claude Code:
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
-On Windows, use `cmd /c npx` instead of `npx`:
+On Windows (PowerShell), use `cmd /c npx` and quote the `--`:
 
 ```powershell
-claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
+claude mcp add linkbrief -s user '--' cmd /c npx -y linkbrief-mcp
 ```
 
 Reopen Claude Code, type `/mcp` to see `linkbrief` connected, then paste a link and ask. That's it.

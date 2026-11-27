@@ -29,10 +29,10 @@ linkbrief는 Claude, Codex, Cursor 등 MCP 에이전트용 서버입니다. 웹 
 claude mcp add linkbrief -s user -- npx -y linkbrief-mcp
 ```
 
-Windows에서는 `npx` 대신 `cmd /c npx`:
+Windows(PowerShell)에서는 `cmd /c npx`를 쓰고 `--`를 따옴표로 감싸세요:
 
 ```powershell
-claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
+claude mcp add linkbrief -s user '--' cmd /c npx -y linkbrief-mcp
 ```
 
 Claude Code를 다시 열고 `/mcp`에서 `linkbrief`가 연결됐는지 확인한 뒤, 링크와 함께 부탁하면 끝입니다.
