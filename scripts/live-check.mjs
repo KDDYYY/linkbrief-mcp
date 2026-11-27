@@ -15,6 +15,15 @@ const DEFAULT_URLS = [
   // PDFs
   "https://arxiv.org/pdf/1706.03762",
   "https://www.kcue.or.kr/_upload/high/2026/03/27/application_642e302e6e463874a6d1db2a6734851d.pdf",
+  // Developer sites read through their public APIs
+  "https://github.com/nodejs/node/issues/1",
+  "https://github.com/modelcontextprotocol/servers/blob/main/README.md",
+  "https://stackoverflow.com/questions/11227809",
+  "https://news.ycombinator.com/item?id=8863",
+  "https://arxiv.org/abs/1706.03762",
+  // Office documents
+  "https://calibre-ebook.com/downloads/demos/demo.docx",
+  "https://go.microsoft.com/fwlink/?LinkID=521962",
   // Global sites
   "https://namu.wiki/w/%EA%B9%80%EC%B9%98",
   "https://github.com/modelcontextprotocol/servers",

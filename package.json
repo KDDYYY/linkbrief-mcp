@@ -1,6 +1,7 @@
 {
   "name": "linkbrief-mcp",
-  "version": "0.2.0",
+  "mcpName": "io.github.KDDYYY/linkbrief-mcp",
+  "version": "0.3.0",
   "description": "MCP server that lets Claude, Codex and other agents read any link — web pages, PDFs, JavaScript pages — as clean Markdown from your own computer, with ~95% fewer tokens than raw HTML. Handles any language and legacy encodings.",
   "type": "module",
   "bin": {
@@ -10,6 +11,8 @@
     "server.mjs",
     "page.mjs",
     "browser.mjs",
+    "office.mjs",
+    "robots.mjs",
     "sites.mjs"
   ],
   "engines": {
@@ -18,7 +21,8 @@
   "scripts": {
     "start": "node server.mjs",
     "test": "node test.mjs",
-    "check:live": "node scripts/live-check.mjs"
+    "check:live": "node scripts/live-check.mjs",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "keywords": [
     "mcp",
@@ -50,6 +54,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@mozilla/readability": "^0.6.0",
+    "fflate": "^0.8.3",
     "linkedom": "^0.18.15",
     "turndown": "^7.2.5",
     "unpdf": "1.9.1",

@@ -2,7 +2,7 @@
 
 [English](README.md) | **한국어**
 
-Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 서버입니다. 링크를 주고 "요약해 줘"라고 하면, linkbrief가 본문만 Markdown으로 가져오고 Claude가 정리합니다. Codex, Cursor 등 MCP를 지원하는 다른 도구에서도 똑같이 쓸 수 있습니다.
+Claude가 **내 PC에서 직접** 웹 페이지, PDF, Office 문서를 읽게 해 주는 MCP 서버입니다. 링크를 주고 "요약해 줘"라고 하면, linkbrief가 본문만 Markdown으로 가져오고 Claude가 정리합니다. Codex, Cursor 등 MCP를 지원하는 다른 도구에서도 똑같이 쓸 수 있습니다.
 
 위키백과, 나무위키, GitHub, 개발 문서, 세계 각국 뉴스와 블로그, PDF, JavaScript로 그려지는 페이지까지 어떤 언어의 링크든 읽습니다. 다른 도구가 자주 놓치는 사이트도 따로 챙깁니다: 네이버 블로그(iframe 구조), 나무위키, 그리고 EUC-KR·Shift_JIS·GBK 같은 옛 인코딩.
 
@@ -14,6 +14,8 @@ Claude가 **내 PC에서 직접** 웹 페이지와 PDF를 읽게 해 주는 MCP 
 
 - **토큰을 95% 아낍니다.** 웹 페이지 HTML의 대부분은 메뉴·광고·스크립트·이미지 주소입니다. linkbrief는 본문만 남겨 넘깁니다. ([측정 결과](#토큰-절감-효과))
 - **필요한 부분만 읽습니다.** 먼저 목차(제목·분량·첫 문장)를 보고, 필요한 문단만 골라 읽습니다. 긴 위키백과 문서라면 전체를 읽을 때보다 87% 적습니다.
+- **개발자용 사이트를 제대로 읽습니다.** GitHub 이슈·PR은 댓글 전체와 변경 파일까지, Stack Overflow는 질문과 추천 답변, Hacker News는 댓글 트리 전체, arXiv 요약 페이지는 논문 본문으로 읽습니다. 문서 사이트는 한 섹션을 통째로 읽어 줍니다 (`fetch_site`).
+- **문서 파일도 읽습니다.** PDF는 쪽별로, Word·PowerPoint·Excel·한글(.hwpx) 파일도 링크만 주면 됩니다.
 - **막힌 사이트도 읽습니다.** Claude의 기본 웹 가져오기는 일부 사이트(예: `blog.naver.com`)가 막혀 있습니다. linkbrief는 **사용자 PC에서 일반 브라우저처럼** 요청합니다.
 - **네이버 블로그가 비어 보이지 않습니다.** 본문이 iframe 안에 있어 그냥 가져오면 비어 있는데, linkbrief는 본문이 들어 있는 모바일 주소로 바꿔 읽습니다.
 - **PDF, 여러 링크, JavaScript 페이지까지** 한 도구로 처리합니다.
@@ -39,7 +41,7 @@ claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 
 > 이 글 3줄로 요약해 줘: https://blog.naver.com/아이디/글번호
 
-Claude Desktop, Codex, Cursor 설정은 아래 [설치](#설치)를 보세요.
+Claude Desktop(클릭 한 번 설치), Codex, Cursor 설정은 아래 [설치](#설치)를 보세요.
 
 ### 어떻게 동작하나요?
 
@@ -109,7 +111,9 @@ Windows(PowerShell·명령 프롬프트)에서는 `npx`를 `cmd /c`로 감싸야
 claude mcp add linkbrief -s user -- cmd /c npx -y linkbrief-mcp
 ```
 
-**Claude Desktop** — `claude_desktop_config.json`에 추가 (설정 → 개발자 → 설정 편집):
+**Claude Desktop, 클릭 한 번으로** — [최신 릴리스](https://github.com/KDDYYY/linkbrief-mcp/releases/latest)에서 `linkbrief.mcpb`를 내려받아 더블클릭하거나, 설정 → 확장 프로그램에 끌어다 놓으세요. GitHub 토큰(선택)도 거기서 넣을 수 있습니다.
+
+**Claude Desktop, 설정 파일로** — `claude_desktop_config.json`에 추가 (설정 → 개발자 → 설정 편집):
 
 ```json
 {
@@ -159,6 +163,20 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 **PDF** — 논문, 보도자료, 보고서 링크도 그대로 주면 됩니다. 자세한 방법은 아래 [PDF 읽기](#pdf-읽기)를 보세요.
 
 > 이 논문 핵심 기여 3가지와 실험 결과만 정리해 줘: https://arxiv.org/pdf/1706.03762
+
+**코드 리뷰·디버깅**
+
+> 이 PR 논의 내용 요약하고 바뀐 파일 목록 보여 줘: https://github.com/owner/repo/pull/123
+
+> 여기서 채택된 해결책이 뭐고 왜 되는지 설명해 줘: https://stackoverflow.com/questions/11227809
+
+**문서 사이트 한 섹션 통째로** — `fetch_site`가 시작 페이지와 같은 폴더 아래 링크를 따라 읽습니다 (최대 30쪽, robots.txt 준수).
+
+> 파이썬 튜토리얼 읽고 한 장짜리 요약표 만들어 줘: https://docs.python.org/3/tutorial/index.html
+
+**Office 문서** — Word·PowerPoint·Excel·한글(.hwpx) 링크도 PDF처럼 읽습니다.
+
+> 이 발표 자료 슬라이드별로 요약해 줘: https://example.org/files/q3-review.pptx
 
 **원하는 형식으로**
 
@@ -227,7 +245,10 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 |---|---|
 | Claude가 도구를 안 쓰고 "링크를 열 수 없다"고 함 | Claude를 다시 시작했는지, `claude mcp list`에 `✔ Connected`인지 확인. "linkbrief로 읽어 줘"라고 직접 말해도 됩니다 |
 | `Page text too short` | 로그인이 필요한 페이지이거나, JavaScript 페이지인데 Chrome·Edge가 없는 경우입니다 |
-| `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium, Stack Overflow, npm 웹사이트) |
+| `This site shows a bot check` | 사이트가 봇 확인(Cloudflare 등)을 요구합니다. linkbrief는 우회하지 않습니다 (예: Medium, Reddit, npm 웹사이트) |
+| `GitHub API: API rate limit exceeded` | 환경 변수 `GITHUB_TOKEN`을 넣으세요 (Claude Desktop 확장은 설정 칸에 입력) |
+| `robots.txt on … asks automated tools not to read …` | 사이트가 자동 읽기를 거부했습니다 (`fetch_site`, 또는 `LINKBRIEF_ROBOTS=always`일 때) |
+| `Old binary .hwp files are not supported` | .hwpx나 PDF로 저장하거나, 파일을 직접 첨부하세요 |
 | `Refusing to fetch a private or local address` | `localhost`·사내망 주소는 보안상 막혀 있습니다 |
 | `PDF has no extractable text` | 스캔 이미지로 된 PDF입니다 (글자 인식 OCR은 지원 안 함) |
 | `This Naver Cafe post can only be read after logging in` | 카페 회원이나 로그인한 사람만 볼 수 있는 글입니다. 글 내용을 직접 붙여 넣어 주세요 |
@@ -249,6 +270,17 @@ Claude에게 링크와 함께 평소 말투로 부탁하면 됩니다. Claude가
 | `render` | false | 처음부터 브라우저로 읽기. 보통은 필요 없습니다 (자동 대체됨) |
 | `outline` | false | 제목 목차만 돌려주기 (각 문단의 분량과 첫 문장 포함) |
 | `section` | — | 한 문단(하위 문단 포함)만 돌려주기: 목차 번호(`"#3"`)나 제목(`"역사"`, `"Page 4"`) |
+
+### `fetch_site` — 문서 사이트·섹션 읽기
+
+| 인자 | 기본값 | 설명 |
+|---|---|---|
+| `url` | (필수) | 시작 페이지. 이 페이지와 같은 폴더 아래 링크만 따라갑니다 |
+| `max_pages` | 10 | 최대 쪽수 (1~30) |
+| `max_length_per_page` | 4000 | 쪽당 최대 글자 수 (500~20,000) |
+| `include_links` | false | 링크 주소까지 유지할지 |
+
+가까운 링크부터 차례로 읽고, 요청 사이에 쉬며, robots.txt는 항상 지킵니다.
 
 ### `fetch_pages` — 여러 페이지 한 번에
 
@@ -272,24 +304,40 @@ Source: 사이트 | Author: 작성자 | Published: 2026-11-25 | URL: https://...
 | 대상 | 상태 |
 |---|---|
 | 네이버 블로그, 네이버 뉴스, 다음 뉴스, 티스토리, 브런치, 벨로그, 다음 카페(공개 글) | ✅ |
-| 위키백과(모든 언어), 나무위키, GitHub, MDN·Python 문서, Hacker News, Google 블로그 | ✅ |
+| 위키백과(모든 언어), 나무위키, MDN·Python 문서, Google 블로그, GitHub 저장소 | ✅ |
+| GitHub 이슈·PR(댓글 전체, 변경 파일), GitHub 코드 파일(원본) | ✅ GitHub API 사용 (시간당 60회, `GITHUB_TOKEN`이 있으면 더 많이) |
+| Stack Overflow, Super User, Server Fault, Ask Ubuntu, *.stackexchange.com 질문 | ✅ Stack Exchange API 사용 (질문 + 추천순 답변 10개) |
+| Hacker News 글·댓글, arXiv (요약 페이지 → 논문 본문) | ✅ |
 | BBC, 르몽드, 슈피겔, NHK, 인민망, 타이랏, VnExpress 등 해외 뉴스 | ✅ |
 | PDF (영어·한국어 확인, 페이지별 구분) | ✅ |
+| Word(.docx), PowerPoint(.pptx), Excel(.xlsx, 시트당 처음 200행), 한글(.hwpx) | ✅ (Excel 날짜는 일련번호로 나옴) |
+| 예전 한글 형식(.hwp) | ❌ .hwpx나 PDF로 저장해서 쓰세요 |
 | JavaScript로 그려지는 페이지 | ✅ Chrome·Edge가 있으면 자동 |
 | EUC-KR, Shift_JIS, EUC-JP, GBK/GB2312, Big5, TIS-620, windows-1258 | ✅ |
 | 네이버 카페 | ⚠️ 로그인 없이 공개된 글만. 로그인·회원 전용 글은 읽지 않고 그렇다고 알려 줍니다 (내 계정을 쓰지 않음) |
-| Medium, Stack Overflow, Reddit 등 봇 확인을 거는 사이트 | ❌ 우회하지 않습니다 |
+| Medium, Reddit 등 봇 확인을 거는 사이트 (Stack Overflow는 질문 페이지 외) | ❌ 우회하지 않습니다 |
 | Google 검색 결과 페이지 | ❌ Google이 자동 접근을 막습니다. Claude의 웹 검색을 쓰세요 |
 | YouTube 자막, 로그인이 필요한 글, 스캔 PDF, 이미지·동영상 | ❌ |
 
 실제 사이트 점검 결과 (`npm run check:live`, 2026-11-27) — Medium·Reddit(봇 확인)과 Google 검색은 의도적으로 거절합니다:
 
-![국내외 29개 사이트 점검 결과](docs/images/live.png)
+![국내외 36개 사이트 점검 결과](docs/images/live.png)
+
+## 설정
+
+모두 선택 사항이며 환경 변수로 넣습니다 (Claude Desktop·Codex 설정의 `env`):
+
+| 변수 | 효과 |
+|---|---|
+| `GITHUB_TOKEN` | GitHub 이슈·PR을 읽는 API 한도를 시간당 60회 → 5,000회로 |
+| `LINKBRIEF_ROBOTS=always` | 링크 하나를 읽을 때도 robots.txt 지키기 (`fetch_site`는 항상 지킴) |
+| `LINKBRIEF_BROWSER=off` / `=<경로>` | 브라우저 재시도 끄기, 또는 특정 Chrome·Edge 지정 |
 
 ## 보안
 
 - **내부망 차단:** `localhost`, 사설 IP(10.x, 192.168.x 등), 링크 로컬, 클라우드 메타데이터 주소(169.254.169.254)는 거절합니다. 리다이렉트와 브라우저 안의 요청도 하나하나 다시 검사합니다. 웹페이지 속 악성 지시에 속은 Claude가 내 공유기나 사내망을 읽지 못하게 하기 위해서입니다.
-- **크기 제한:** 웹 페이지 5MB, PDF 30MB까지만 읽고, HTML·텍스트·PDF가 아닌 응답은 거절합니다.
+- **크기 제한:** 웹 페이지 5MB, PDF·Office 문서 30MB(압축 해제 후 60MB)까지만 읽고, 그 밖의 파일 형식은 거절합니다.
+- **예의 바른 크롤링:** `fetch_site`는 한 사이트의 한 폴더 안에서만 움직이고, robots.txt를 지키며, 요청 사이에 쉽니다. 사용자가 준 링크 하나는 브라우저로 여는 것처럼 읽습니다.
 - **브라우저 격리:** 헤드리스 브라우저는 매번 빈 프로필로 열고 닫습니다.
 - 가져온 본문은 Claude에게 "지시가 아닌 데이터"로 표시해 넘깁니다.
 
@@ -309,6 +357,9 @@ node page.mjs <URL> --render   # 브라우저로 읽은 결과 보기
 | `server.mjs` | MCP 서버, `fetch_page`·`fetch_pages` 도구 정의 |
 | `page.mjs` | 가져오기·보안 검사·인코딩·본문 추출(Readability → Markdown)·PDF·캐시 |
 | `browser.mjs` | 설치된 Chrome·Edge로 JavaScript 페이지 읽기 (선택) |
+| `office.mjs` | Word·PowerPoint·Excel·한글(.hwpx) 문서 |
+| `robots.mjs` | robots.txt 해석 |
+| `manifest.json`, `server.json` | Claude Desktop 확장과 MCP Registry 정보 (`npm run build:mcpb`로 `dist/linkbrief.mcpb` 생성) |
 | `sites.mjs` | 사이트별 규칙 (주소 바꾸기, 거절 안내) |
 | `fixtures/` | 테스트용 HTML (실제 글이 아닌, 구조만 본뜬 직접 작성한 내용) |
 

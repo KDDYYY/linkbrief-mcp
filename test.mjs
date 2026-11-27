@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section } from "./page.mjs";
+import { extract, paginate, isBlockedIp, assertPublicUrl, readBody, formatPage, pdfToMarkdown, isBotWall, fetchText, outline, section, crawlSite } from "./page.mjs";
 import { findBrowser, renderPage } from "./browser.mjs";
-import { normalizeUrl, naverCafeIds, pickFor, sites } from "./sites.mjs";
+import { parseRobots, isAllowed } from "./robots.mjs";
+import { officeKind, officeToMarkdown } from "./office.mjs";
+import { zipSync, strToU8 } from "fflate";
+import { normalizeUrl, naverCafeIds, pickFor, sites, stackExchangeSite } from "./sites.mjs";
 
 const fixture = (name) => fs.readFileSync(new URL(`./fixtures/${name}`, import.meta.url), "utf8");
 
@@ -28,6 +31,142 @@ assert.equal(normalizeUrl("https://blog.google/"), "https://blog.google/");
   assert.deepEqual(ok, { html: "<p>본문</p>", title: "공개 글", byline: "카페회원", siteName: "네이버 카페 | 테스트카페", published: "2026-11-01T00:00:00.000Z" });
   // Shape seen live for a login-only post (2026-11-26)
   assert.throws(() => cafe.fromApi({ result: { errorCode: "0004", reason: "로그인하지 않았습니다.", more: { cafeId: 1 } } }), /logging in or joining the cafe \(Naver says: 로그인하지 않았습니다\.\)/);
+}
+
+// Site loaders, fed by a fake getJson keyed by URL substring
+{
+  const fake = (routes) => async (url) => {
+    const key = Object.keys(routes).find((k) => url.includes(k));
+    if (!key) throw new Error(`unexpected request ${url}`);
+    return routes[key];
+  };
+  const site = (name) => sites.find((s) => s.name === name);
+  const u = (s) => new URL(s);
+
+  // GitHub PR: description, changed files, comments
+  const gh = await site("github-issue").load(u("https://github.com/acme/tool/pull/7"), fake({
+    "/issues/7/comments": [{ user: { login: "bob" }, created_at: "2026-01-02T00:00:00Z", body: "Looks good ![img](https://x/y.png)" }],
+    "/pulls/7/files": [{ filename: "src/a.js", status: "modified", additions: 3, deletions: 1 }],
+    "/issues/7": { title: "Fix bug", state: "open", user: { login: "amy" }, created_at: "2026-01-01T00:00:00Z", labels: [{ name: "bug" }], body: "Fixes it.", comments: 1, pull_request: {} },
+  }));
+  assert.equal(gh.title, "Fix bug (#7)");
+  assert.equal(gh.siteName, "GitHub · acme/tool");
+  assert.match(gh.markdown, /^\*\*Pull request · open\*\* · opened by @amy on 2026-01-01 · labels: bug\n\nFixes it\.\n\n## Changed files \(1\)\n\n- src\/a\.js \(modified, \+3 −1\)\n\n## Comments \(1\)\n\n### @bob · 2026-01-02\n\nLooks good/);
+  await assert.rejects(site("github-issue").load(u("https://github.com/a/b/issues/1"), fake({ "/issues/1": { message: "API rate limit exceeded for 1.2.3.4." } })), /rate limit.*GITHUB_TOKEN/);
+  assert.ok(!site("github-issue").match(u("https://github.com/acme/tool")), "repo home page stays a normal page");
+
+  // GitHub code file -> raw; arXiv abstract -> PDF
+  assert.equal(normalizeUrl("https://github.com/acme/tool/blob/main/src/a.js?plain=1#L3"), "https://raw.githubusercontent.com/acme/tool/main/src/a.js");
+  assert.equal(normalizeUrl("https://arxiv.org/abs/1706.03762v7"), "https://arxiv.org/pdf/1706.03762v7");
+
+  // Stack Exchange: site names and question + answers
+  assert.equal(stackExchangeSite("stackoverflow.com"), "stackoverflow");
+  assert.equal(stackExchangeSite("math.stackexchange.com"), "math");
+  assert.equal(stackExchangeSite("www.superuser.com"), "superuser");
+  assert.equal(stackExchangeSite("mathoverflow.net"), "mathoverflow.net");
+  const se = await site("stack-exchange").load(u("https://stackoverflow.com/questions/42/why-is-it"), fake({
+    "/answers": { items: [{ is_accepted: true, score: 9, owner: { display_name: "Ann" }, body: "<p>Because.</p>" }] },
+    "/questions/42?": { items: [{ title: "Why &quot;x&quot;?", score: 5, owner: { display_name: "Q&amp;A" }, tags: ["js"], body: "<p>Why?</p>", answer_count: 3, creation_date: 1700000000 }] },
+  }));
+  assert.equal(se.title, 'Why "x"?');
+  assert.equal(se.byline, "Q&A");
+  assert.match(se.html, /<h2>Answers \(3, top 1 by votes\)<\/h2>\n<h3>✓ Accepted answer · score 9 · Ann<\/h3><p>Because\.<\/p>/);
+  assert.ok(!site("stack-exchange").match(u("https://stackoverflow.com/tags")));
+
+  // Hacker News: nested comments, dead ones skipped
+  const hn = await site("hacker-news").load(u("https://news.ycombinator.com/item?id=1"), fake({
+    "/item/1.json": { id: 1, title: "Show HN: thing", by: "op", time: 1700000000, url: "https://thing.example/", kids: [2, 3], descendants: 3 },
+    "/item/2.json": { id: 2, by: "c1", time: 1700000100, text: "<p>first</p>", kids: [4] },
+    "/item/3.json": { id: 3, dead: true, text: "spam" },
+    "/item/4.json": { id: 4, by: "c2", time: 1700000200, text: "reply" },
+  }));
+  assert.equal(hn.title, "Show HN: thing");
+  assert.match(hn.html, /<blockquote><p><strong>c1<\/strong> · 2023-11-14<\/p><p>first<\/p><blockquote><p><strong>c2<\/strong>[^]*reply<\/blockquote><\/blockquote>/);
+  assert.ok(!hn.html.includes("spam"));
+
+  // Naver Cafe goes through load as well
+  await assert.rejects(site("naver-cafe").load(u("https://cafe.naver.com/ArticleRead.nhn?clubid=12345678&articleid=42"), fake({ "cafe-articleapi": { result: { reason: "로그인하지 않았습니다." } } })), /logging in or joining/);
+}
+
+// crawlSite: stays under the start folder, skips assets and robots-blocked pages, dedupes, stops at maxPages
+{
+  const web = {
+    "https://d.example/guide/": ["intro", "/guide/setup", "/blog/x", "https://other.example/guide/y", "/guide/logo.png", "#top", "/guide/private"],
+    "https://d.example/guide/intro": ["/guide/setup", "/guide/api#auth"],
+    "https://d.example/guide/setup": ["/guide/api"],
+    "https://d.example/guide/api": ["/guide/more"],
+  };
+  const fetcher = async (url) => {
+    if (!web[url]) throw new Error("HTTP 404");
+    return { url, text: `# ${url}`, hrefs: web[url] };
+  };
+  const allow = async (url) => !url.endsWith("/private");
+  const r = await crawlSite("https://d.example/guide/#start", { maxPages: 4, delayMs: 0, fetcher, allow });
+  assert.equal(r.scope, "https://d.example/guide/");
+  assert.deepEqual(r.pages.map((p) => p.url), ["https://d.example/guide/", "https://d.example/guide/intro", "https://d.example/guide/setup", "https://d.example/guide/api"]);
+  assert.deepEqual(r.skipped, ["https://d.example/guide/private (robots.txt)"]);
+  assert.equal(r.notRead, 1); // /guide/more found but over the page limit
+  const all = await crawlSite("https://d.example/guide/", { maxPages: 10, delayMs: 0, fetcher, allow });
+  assert.equal(all.pages.length, 4);
+  assert.match(all.skipped.join(), /guide\/more \(HTTP 404\)/);
+}
+
+// Office documents, built in memory as ZIPs of XML
+{
+  const zip = (files) => Buffer.from(zipSync(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, strToU8(v)]))));
+  const core = '<cp:coreProperties xmlns:dc="x" xmlns:dcterms="y"><dc:title>Quarterly &amp; Plan</dc:title><dc:creator>Kim</dc:creator><dcterms:created>2026-03-01T00:00:00Z</dcterms:created></cp:coreProperties>';
+
+  const d = officeToMarkdown(zip({ "docProps/core.xml": core, "word/document.xml": `<w:document><w:body>
+    <w:p><w:pPr><w:pStyle w:val="Title"/></w:pPr><w:r><w:t>Plan</w:t></w:r></w:p>
+    <w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Goals</w:t></w:r></w:p>
+    <w:p><w:r><w:t xml:space="preserve">Ship </w:t></w:r><w:r><w:t>v2 &lt;soon&gt;</w:t></w:r></w:p>
+    <w:tbl><w:tr><w:tc><w:p><w:r><w:t>Item</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Owner</w:t></w:r></w:p></w:tc></w:tr>
+      <w:tr><w:tc><w:p><w:r><w:t>Docs</w:t></w:r></w:p></w:tc><w:tc><w:p><w:r><w:t>Lee</w:t></w:r></w:p></w:tc></w:tr></w:tbl>
+    <w:p/></w:body></w:document>` }), "docx");
+  assert.equal(d.markdown, "## Plan\n\n## Goals\n\nShip v2 <soon>\n\n| Item | Owner |\n| --- | --- |\n| Docs | Lee |");
+  assert.equal(d.title, "Quarterly & Plan");
+  assert.equal(d.byline, "Kim");
+
+  const p = officeToMarkdown(zip({
+    "ppt/slides/slide10.xml": "<p:sld><a:p><a:r><a:t>Ten</a:t></a:r></a:p></p:sld>",
+    "ppt/slides/slide2.xml": "<p:sld><a:p><a:r><a:t>Two</a:t></a:r><a:r><a:t>!</a:t></a:r></a:p><a:p><a:r><a:t>Bullet</a:t></a:r></a:p></p:sld>",
+  }), "pptx");
+  assert.equal(p.markdown, "## Slide 1\n\nTwo!\n\nBullet\n\n## Slide 2\n\nTen", "slides in numeric order");
+
+  const x = officeToMarkdown(zip({
+    "xl/workbook.xml": '<workbook><sheets><sheet name="Sales" sheetId="1" r:id="rId1"/></sheets></workbook>',
+    "xl/_rels/workbook.xml.rels": '<Relationships><Relationship Id="rId1" Type="ws" Target="worksheets/sheet1.xml"/></Relationships>',
+    "xl/sharedStrings.xml": "<sst><si><t>Region</t></si><si><t>Total</t></si><si><r><t>So</t></r><r><t>uth</t></r></si></sst>",
+    "xl/worksheets/sheet1.xml": '<worksheet><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c></row><row r="2"><c r="A2" t="s"><v>2</v></c><c r="C2"><v>42</v></c></row></sheetData></worksheet>',
+  }), "xlsx");
+  assert.equal(x.markdown, "## Sheet: Sales\n\n| Region | Total |  |\n| --- | --- | --- |\n| South |  | 42 |");
+
+  const h = officeToMarkdown(zip({ "Contents/section0.xml": "<hs:sec><hp:p><hp:run><hp:t>한글 문서</hp:t></hp:run></hp:p><hp:p><hp:run><hp:t>둘째 문단</hp:t></hp:run></hp:p></hs:sec>" }), "hwpx");
+  assert.equal(h.markdown, "한글 문서\n\n둘째 문단");
+
+  assert.throws(() => officeToMarkdown(Buffer.alloc(10), "hwp"), /binary \.hwp/);
+  assert.equal(officeKind("application/vnd.openxmlformats-officedocument.wordprocessingml.document", "https://x.example/a"), "docx");
+  assert.equal(officeKind("application/octet-stream", "https://x.example/files/report.HWPX"), "hwpx");
+  assert.equal(officeKind("text/html", "https://x.example/a.docx"), null, "an HTML page named .docx is still a web page");
+}
+
+// robots.txt parsing and matching
+{
+  const txt = [
+    "User-agent: Googlebot", "Disallow: /", "",
+    "User-agent: *", "Disallow: /private/", "Allow: /private/public-*", "Disallow: /*.json$", "Disallow:", "# comment",
+  ].join("\n");
+  const rules = parseRobots(txt);
+  assert.ok(isAllowed(rules, "/docs/intro"));
+  assert.ok(!isAllowed(rules, "/private/x"));
+  assert.ok(isAllowed(rules, "/private/public-page"), "longer Allow wins");
+  assert.ok(!isAllowed(rules, "/data/a.json"));
+  assert.ok(isAllowed(rules, "/data/a.json?x=1"), "$ anchors the end");
+  const mine = parseRobots("User-agent: *\nDisallow:\n\nUser-agent: linkbrief\nDisallow: /docs/");
+  assert.ok(!isAllowed(mine, "/docs/a"), "our own group beats *");
+  assert.ok(isAllowed(parseRobots(""), "/anything"));
+  const multi = parseRobots("User-agent: a\nUser-agent: *\nDisallow: /x");
+  assert.ok(!isAllowed(multi, "/x/1"), "consecutive User-agent lines share one group");
 }
 
 // Icon-only link (text hidden inside a dropped <svg>) leaves no "[](...)"

@@ -7,6 +7,8 @@ import { Readability } from "@mozilla/readability";
 import { parseHTML } from "linkedom";
 import TurndownService from "turndown";
 import { findBrowser, renderPage } from "./browser.mjs";
+import { officeKind, officeToMarkdown } from "./office.mjs";
+import { robotsAllows } from "./robots.mjs";
 import { normalizeUrl, pickFor, sites } from "./sites.mjs";
 
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -77,9 +79,19 @@ export function extract(html, { links = true, pick } = {}) {
   const byline = (meta('meta[property="naverblog:nickname"]') || article?.byline || meta('meta[name="author"]')).trim();
   const siteName = (article?.siteName || meta('meta[property="og:site_name"]')).trim();
   const published = (article?.publishedTime || meta('meta[property="article:published_time"]')).trim();
-  let markdown = turndown.turndown(useArticle ? article.content : document.body?.innerHTML || html);
+  const hrefs = [...document.querySelectorAll("a[href]")].map((a) => a.getAttribute("href")); // for fetch_site
+  return { title, byline, siteName, published, hrefs, markdown: toMarkdown(useArticle ? article.content : document.body?.innerHTML || html, { links }) };
+}
+
+// HTML fragment -> tidy Markdown (also used for API bodies, which need no Readability).
+export function toMarkdown(html, { links = true } = {}) {
+  return tidyMarkdown(turndown.turndown(html), { links });
+}
+
+export function tidyMarkdown(markdown, { links = true } = {}) {
+  markdown = markdown.replace(/!\[[^\]]*\]\((?:\\.|[^()\\]|\([^)]*\))*\)/g, ""); // images (GitHub/API Markdown)
   if (!links) markdown = markdown.replace(MD_LINK, "$1");
-  markdown = markdown
+  return markdown
     .replace(ZERO_WIDTH, "")
     .replace(/\[\s*\]\([^)]*\)/g, "") // links left empty once icons/images were dropped
     .replace(/^([ \t]*(?:-|\d+\.)) {2,}/gm, "$1 ") // turndown pads list markers to 4 columns
@@ -87,7 +99,6 @@ export function extract(html, { links = true, pick } = {}) {
     .replace(/^[ \t ]+(?![-*+] |\d+\. )/gm, "") // stray indentation (often NBSP); keeps nested list items
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-  return { title, byline, siteName, published, markdown };
 }
 
 // "2026-10-23T09:00:00+09:00" or PDF "D:20240101120000" -> "2026-10-23"; anything else as-is.
@@ -281,7 +292,7 @@ export function fetchText(raw, { links = true, render = false } = {}) {
   if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
   // Always a promise: normalizeUrl can throw (bad URL, refused site) and fetch_pages relies on rejections.
   // API-backed sites (Naver Cafe) skip the browser: rendering only yields the app's empty frame.
-  const useBrowser = () => render && !sites.some((s) => s.api && s.match(new URL(raw)));
+  const useBrowser = () => render && !loaderFor(raw);
   const promise = Promise.resolve().then(() => (useBrowser() ? fetchRendered(normalizeUrl(raw), links) : fetchUncached(raw, { links })));
   cache.delete(key); // re-insert so an expired entry moves to the newest end for eviction
   cache.set(key, { at: Date.now(), promise });
@@ -304,7 +315,7 @@ async function fetchRendered(url, links) {
   if (rendered.status >= 400) throw new Error(`Fetch failed in browser: HTTP ${rendered.status} for ${rendered.url}`);
   const page = extract(rendered.html, { links, pick: pickFor(rendered.url) });
   if (page.markdown.length < 200) throw new Error(`Page text too short even after JavaScript rendering - page may need login: ${rendered.url}`);
-  return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }) };
+  return { url: rendered.url, text: formatPage({ url: rendered.url, ...page }), hrefs: page.hrefs };
 }
 
 // Plain request first; pages that block it (403/429/503) or come back empty retry in a local browser.
@@ -324,22 +335,40 @@ function browserRetryable(message, url) {
 }
 
 // Sites whose page is an empty app shell (Naver Cafe) are read from the JSON API the page itself uses.
-async function fetchViaApi(site, u, links) {
-  const apiUrl = site.api(u);
-  await assertPublicUrl(apiUrl);
-  const res = await get(apiUrl, null, site.headers);
-  let json;
-  try { json = JSON.parse((await readBytes(res, MAX_BYTES)).toString("utf8")); } catch {
-    throw new Error(`Unexpected response from ${site.name} (HTTP ${res.status}) for ${u.href}`);
+// JSON from a site's public API, with the same private-address guard. Error bodies are returned too
+// (Naver Cafe answers 401 with a reason) so the site loader can explain them.
+export async function getJson(url, headers) {
+  await assertPublicUrl(url);
+  const res = await get(url, null, headers);
+  const body = (await readBytes(res, MAX_BYTES)).toString("utf8");
+  try { return JSON.parse(body); } catch {
+    throw new Error(`Unexpected response (HTTP ${res.status}) from ${new URL(url).host}`);
   }
-  const { html, ...meta } = site.fromApi(json);
-  const { markdown } = extract(`<html><body><article>${html}</article></body></html>`, { links });
-  return { url: u.href, text: formatPage({ url: u.href, ...meta, markdown }) };
+}
+
+// robots.txt text for robots.mjs; any failure or non-200 answer means "no rules".
+async function fetchRobotsText(url) {
+  await assertPublicUrl(url);
+  const res = await get(url);
+  if (res.status !== 200) return "";
+  return (await readBytes(res, 512 * 1024)).toString("utf8");
+}
+export const robotsAllow = (url) => robotsAllows(url, fetchRobotsText);
+export const robotsBlocked = (url) => new Error(`robots.txt on ${new URL(url).host} asks automated tools not to read ${url}`);
+
+// Sites read through their own API (sites.mjs `load`): Naver Cafe, GitHub issues/PRs, Stack Exchange, Hacker News.
+export const loaderFor = (raw) => sites.find((s) => s.load && s.match(new URL(raw)));
+
+async function fetchViaLoader(site, u, links) {
+  const { html, markdown, ...meta } = await site.load(u, getJson);
+  const md = markdown != null ? tidyMarkdown(markdown, { links }) : toMarkdown(html, { links });
+  return { url: u.href, text: formatPage({ url: u.href, ...meta, markdown: md }) };
 }
 
 async function fetchPlain(raw, { links }) {
-  const apiSite = sites.find((s) => s.api && s.match(new URL(raw)));
-  if (apiSite) return fetchViaApi(apiSite, new URL(raw), links);
+  if (process.env.LINKBRIEF_ROBOTS === "always" && !(await robotsAllow(normalizeUrl(raw)))) throw robotsBlocked(raw);
+  const loader = loaderFor(raw);
+  if (loader) return fetchViaLoader(loader, new URL(raw), links);
   let url = normalizeUrl(raw);
   // Some sites (Brunch) set a cookie and redirect to the same URL; without it they loop forever.
   // shortcut: cookies are kept per host for this one request only and ignore Path/Domain/Expires.
@@ -365,6 +394,9 @@ async function fetchPlain(raw, { links }) {
     if (isPdf(type, url)) {
       page = await pdfToMarkdown(await readBytes(res, MAX_PDF_BYTES));
       if (!page.markdown.replace(/## Page \d+/g, "").trim()) throw new Error(`PDF has no extractable text (scanned images?): ${url}`);
+    } else if (officeKind(type, url)) {
+      page = officeToMarkdown(await readBytes(res, MAX_PDF_BYTES), officeKind(type, url));
+      if (!page.markdown) throw new Error(`Document has no text: ${url}`);
     } else if (/^text\/plain\b/i.test(type)) {
       page = { markdown: (await readBody(res)).trim() };
     } else {
@@ -373,8 +405,42 @@ async function fetchPlain(raw, { links }) {
       page = extract(html, { links, pick: pickFor(url) });
       if (page.markdown.length < 200) throw browserRetryable(`Page text too short (${page.markdown.length} chars) - page may need JavaScript or login: ${url}`, url);
     }
-    return { url, text: formatPage({ url, ...page }) };
+    return { url, text: formatPage({ url, ...page }), hrefs: page.hrefs };
   }
+}
+
+const ASSET = /\.(png|jpe?g|gif|svg|webp|ico|css|js|mjs|json|xml|txt|zip|gz|tgz|tar|mp4|mp3|wav|woff2?|ttf|exe|dmg|msi|apk)$/i;
+
+// Reads up to maxPages pages under the start page's folder, breadth-first: always honours robots.txt
+// and pauses between requests. fetcher/allow are injectable for tests.
+export async function crawlSite(start, { maxPages = 10, links = false, delayMs = 500, fetcher = fetchText, allow = robotsAllow } = {}) {
+  const first = new URL(normalizeUrl(start));
+  first.hash = "";
+  const scope = first.origin + first.pathname.replace(/[^/]*$/, "");
+  const queue = [first.href];
+  const seen = new Set(queue);
+  const pages = [];
+  const skipped = [];
+  while (queue.length && pages.length < maxPages) {
+    const url = queue.shift();
+    if (!(await allow(url))) { skipped.push(`${url} (robots.txt)`); continue; }
+    if (pages.length && delayMs) await new Promise((r) => setTimeout(r, delayMs));
+    try {
+      const page = await fetcher(url, { links });
+      pages.push(page);
+      for (const href of page.hrefs || []) {
+        let next;
+        try { next = new URL(href, page.url); } catch { continue; }
+        next.hash = "";
+        if (!next.href.startsWith(scope) || ASSET.test(next.pathname) || seen.has(next.href)) continue;
+        seen.add(next.href);
+        queue.push(next.href);
+      }
+    } catch (err) {
+      skipped.push(`${url} (${err.message.slice(0, 100)})`);
+    }
+  }
+  return { scope, pages, skipped, notRead: queue.length };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
